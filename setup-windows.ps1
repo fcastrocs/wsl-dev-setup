@@ -231,6 +231,7 @@ try {
     }
 
     wsl --distribution $distro -- bash -c "chmod +x ~/setup/wsl-init.sh && ~/setup/wsl-init.sh"
+    wsl --distribution $distro -- bash -c "rm -rf ~/setup"
     wsl --shutdown
 } catch {
     Write-Host "Failed to execute setup-ubuntu.sh in WSL: $($_.Exception.Message)" -ForegroundColor Red
