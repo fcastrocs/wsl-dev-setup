@@ -11,7 +11,7 @@ Ideal for developers who want a fast, clean, and consistent Linux-like workflow 
 
 ## 🚀 Getting Started
 
-### 1. Run the Windows Setup Script
+### Run the Windows Setup Script
 
 Make sure you run this in **PowerShell as Administrator**:
 
@@ -20,11 +20,21 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-windows.ps1 | iex
 ```
 
-This will install WSL2, Ubuntu, and configure the terminal environment.
-
-### 3. Ubuntu Script Runs Automatically
-
-Once Ubuntu is installed, the `setup-ubuntu.sh` script will run inside WSL to complete the environment setup.
+- Installs **WSL2**
+- Installs **Ubuntu (latest LTS)**
+- Configures **Windows Terminal**:
+  - Sets default profile to Ubuntu
+  - Applies the *Fira Code* font and *One Half Dark* color scheme
+- Creates a `.wslconfig` file to optimize WSL2 performance
+- Installs developer-friendly **Fira Code** font
+- Installs popular **Windows IDEs**:
+  - Visual Studio Code
+  - IntelliJ IDEA Ultimate
+  - Cursor IDE
+  - Notepad++
+- Launches Ubuntu and runs `setup-ubuntu.sh` to:
+  - Install developer tools: Git, Zsh, Node.js, Docker, Java, AWS CLI, and more
+  - Configure shell with Starship, Oh My Zsh, plugins, etc.
 
 ---
 
