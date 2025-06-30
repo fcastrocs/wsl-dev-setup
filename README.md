@@ -9,32 +9,15 @@ Ideal for developers who want a fast, clean, and consistent Linux-like workflow 
 
 ---
 
-## 📁 Project Structure
-
-```
-wsl-dev-setup/
-├── setup-windows.ps1      # Run this from PowerShell (as Administrator)
-└── setup-ubuntu.sh        # Automatically runs inside WSL Ubuntu
-```
-
----
-
 ## 🚀 Getting Started
 
-### 1. Clone the Repository
-
-```powershell
-git clone https://github.com/fcastrocs/wsl-dev-setup.git
-cd wsl-dev-setup
-```
-
-### 2. Run the Windows Setup Script
+### 1. Run the Windows Setup Script
 
 Make sure you run this in **PowerShell as Administrator**:
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-.\setup-windows.ps1
+irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-windows.ps1 | iex
 ```
 
 This will install WSL2, Ubuntu, and configure the terminal environment.

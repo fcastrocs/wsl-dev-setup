@@ -16,26 +16,8 @@
 #    - Default profile to Ubuntu
 #    - Font set to "Fira Code"
 #    - Color scheme to "One Half Dark"
-# 8. Runs a `setup-linux.sh` script inside Ubuntu to install developer tools:
-#    - Git
-#    - GitHub CLI
-#    - AWS CLI
-#    - Zsh (shell)
-#    - Oh My Zsh (Zsh framework)
-#    - zsh-autosuggestions (Zsh plugin)
-#    - Starship (prompt customization)
-#    - OpenJDK 21
-#    - Maven
-#    - Node.js + NPM
-#    - kubectl
-#    - k9s
-#    - kubetail
-#    - Docker
-# 9. Installs Chocolatey and uses it to install key developer tools on Windows:
-#    - Notepad++
-#    - Visual Studio Code
-#    - IntelliJ IDEA Ultimate
-#    - Cursor IDE
+# 8. Runs a `setup-ubuntu.sh` script inside Ubuntu to install developer tools
+# 9. Installs Chocolatey and uses it to install key developer tools on Windows
 #
 # All steps are silent or minimal-interaction, making this ideal for scripting or onboarding automation.
 # ================================
@@ -69,11 +51,11 @@ try {
     Start-Process msiexec.exe -Wait -ArgumentList "/i `"$wslKernel`" /quiet"
     Remove-Item $wslKernel -Force
 } catch {
-	Write-Host "WSL lernal installation failed" -ForegroundColor Yellow
+    Write-Host "WSL kernel installation failed" -ForegroundColor Yellow
 }
 
 # Step 3: Install Windows Terminal
-Write-Host "`n[3/11] Installing Windows Terminal..."
+Write-Host "`n[3/10] Installing Windows Terminal..."
 try {
     $term = winget list --id Microsoft.WindowsTerminal 2>$null
     if ($term -notmatch "Microsoft.WindowsTerminal") {
@@ -90,17 +72,17 @@ try {
 Write-Host "`n[4/10] Installing Ubuntu LTS..."
 $exactUbuntu = wsl -l -q 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq "Ubuntu" }
 if (-not $exactUbuntu) {
-	wsl --install -d Ubuntu
+    wsl --install -d Ubuntu
 } else {
-	Write-Host "Ubuntu LTS already installed..." -ForegroundColor Yellow
+    Write-Host "Ubuntu LTS already installed..." -ForegroundColor Yellow
 }
 
 # Step 5: Write .wslconfig
-Write-Host "`n[5/11] Writing .wslconfig..."
+Write-Host "`n[5/10] Writing .wslconfig..."
 try {
     $configPath = "$env:USERPROFILE\.wslconfig"
-	
-	$sys = Get-CimInstance Win32_ComputerSystem
+
+    $sys = Get-CimInstance Win32_ComputerSystem
     $totalMem = [math]::Floor($sys.TotalPhysicalMemory / 1GB)
     $cpuCount = $sys.NumberOfLogicalProcessors
     $allocMem = $totalMem
@@ -117,7 +99,7 @@ kernelCommandLine=quiet elevator=noop
 vmIdleTimeout=0
 "@ | Set-Content -Encoding UTF8 -Path $configPath -Force
 } catch {
-	Write-Host "Failed to write .wslconfig: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Failed to write .wslconfig: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
@@ -125,11 +107,11 @@ vmIdleTimeout=0
 Write-Host "`n[6/10] Installing Fira Code font..."
 $firaCodeInstalled = $false
 try {
-	Add-Type -AssemblyName System.Drawing
-	$fonts = [System.Drawing.FontFamily]::Families
-	$firaCodeInstalled = $fonts | Where-Object { $_.Name -match "Fira.*Code" }
+    Add-Type -AssemblyName System.Drawing
+    $fonts = [System.Drawing.FontFamily]::Families
+    $firaCodeInstalled = $fonts | Where-Object { $_.Name -match "Fira.*Code" }
 } catch {
-	Write-Host "Could not check if Fira Font is installed: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Could not check if Fira Font is installed: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 if (-not $firaCodeInstalled) {
@@ -162,10 +144,10 @@ if (-not $firaCodeInstalled) {
         Remove-Item $zipPath -Force
         Remove-Item $extractTo -Recurse -Force
     } catch {
-		Write-Host "Could not install Fira Font: $($_.Exception.Message)" -ForegroundColor Yellow
-	}
+        Write-Host "Could not install Fira Font: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 } else {
-	Write-Host "Fira Font is already installed." -ForegroundColor Yellow
+    Write-Host "Fira Font is already installed." -ForegroundColor Yellow
 }
 
 # Step 7: Ensure Terminal settings.json exists and close Terminal
@@ -173,19 +155,15 @@ Write-Host "`n[7/10] Looking for Windows Terminal settings..."
 try {
     $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
     $wtProcess = Start-Process wt -ArgumentList "-w", "hide" -PassThru -WindowStyle Hidden
-    
-    # Wait for settings file to be created
+
     $timeout = 0
     while (-not (Test-Path $settingsPath) -and $timeout -lt 20) {
         Start-Sleep -Milliseconds 500
         $timeout++
     }
-    
+
     if (Test-Path $settingsPath) {
-        # Wait a moment for file to be fully written
         Start-Sleep -Seconds 1
-        
-        # Kill the specific process we started
         if (-not $wtProcess.HasExited) {
             $wtProcess.Kill()
             $wtProcess.WaitForExit(5000)
@@ -197,14 +175,14 @@ try {
         }
         exit 1
     }
-    
+
 } catch {
     Write-Host "Could not initialize Windows Terminal: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
 # Step 8: Modify settings.json for font and profile
-Write-Host "`n[8/9] Setting Windows Terminal settings..."
+Write-Host "`n[8/10] Setting Windows Terminal settings..."
 try {
     $jsonText = Get-Content $settingsPath -Raw
     $json = $jsonText | ConvertFrom-Json
@@ -214,12 +192,11 @@ try {
     if (-not $json.profiles.defaults.PSObject.Properties['font']) {
         $json.profiles.defaults | Add-Member -MemberType NoteProperty -Name font -Value @{}
     }
-	
-	if (-not $json.profiles.defaults.PSObject.Properties['colorScheme']) {
+    if (-not $json.profiles.defaults.PSObject.Properties['colorScheme']) {
         $json.profiles.defaults | Add-Member -MemberType NoteProperty -Name colorScheme -Value @{}
     }
 
-	$json.profiles.defaults.colorScheme = "One Half Dark"
+    $json.profiles.defaults.colorScheme = "One Half Dark"
     $json.profiles.defaults.font.face = "Fira Code"
 
     $ubuntuProfile = $json.profiles.list | Where-Object {
@@ -232,57 +209,58 @@ try {
 
     $json | ConvertTo-Json -Depth 99 | Set-Content -Encoding UTF8 -Path $settingsPath
 } catch {
-	Write-Host "Could not apply Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Red
-	exit
+    Write-Host "Could not apply Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Red
+    exit
 }
 
-# Step 9: Run setup-linux to install developer tools
+# Step 9: Run setup-ubuntu.sh inside WSL (local preferred, fallback to remote)
 Write-Host "`n[9/10] Installing developer tools in WSL"
-$scriptPath = ".\setup-linux.sh"
+$localScriptPath = "$PSScriptRoot\setup-ubuntu.sh"
 $distro = "Ubuntu"
-if (Test-Path $scriptPath) {
-    try {
-        # Ensure target folder exists
-        wsl --distribution $distro -- bash -c "mkdir -p ~/setup && rm -f ~/setup/wsl-init.sh"
+$remoteScriptUrl = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-ubuntu.sh"
 
-        # Stream the file directly into WSL using standard input
-        Get-Content $scriptPath -Raw | wsl --distribution $distro -- bash -c "cat > ~/setup/wsl-init.sh"
+try {
+    wsl --distribution $distro -- bash -c "mkdir -p ~/setup && rm -f ~/setup/wsl-init.sh"
 
-        # Make it executable and run it
-        wsl --distribution $distro -- bash -c "chmod +x ~/setup/wsl-init.sh && ~/setup/wsl-init.sh"
-		wsl --shutdown
-    } catch {
-        Write-Host "Error: $_"
+    if (Test-Path $localScriptPath) {
+        Write-Host "Using local setup-ubuntu.sh script"
+        Get-Content $localScriptPath -Raw | wsl --distribution $distro -- bash -c "cat > ~/setup/wsl-init.sh"
+    } else {
+        Write-Host "Local script not found, downloading from GitHub"
+        wsl --distribution $distro -- bash -c "curl -fsSL '$remoteScriptUrl' -o ~/setup/wsl-init.sh"
     }
-} else {
-	Write-Host "setup-linux.sh not found: $($_.Exception.Message)" -ForegroundColor Red
-	exit 1;
+
+    wsl --distribution $distro -- bash -c "chmod +x ~/setup/wsl-init.sh && ~/setup/wsl-init.sh"
+    wsl --shutdown
+} catch {
+    Write-Host "Failed to execute setup-ubuntu.sh in WSL: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
 }
 
-Write-Host "`n[10] Installing chocolatey, then developer tools in Windows"
+# Step 10: Install Chocolatey and Windows dev tools
+Write-Host "`n[10/10] Installing Chocolatey and Windows developer tools..."
 $chocoInstalled = $false
 try {
-	Set-ExecutionPolicy Bypass -Scope Process -Force
-	[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-	$chocoScript = "$env:TEMP\install-choco.ps1"
-	Invoke-WebRequest -Uri "https://community.chocolatey.org/install.ps1" -OutFile $chocoScript -UseBasicParsing
-	powershell -NoProfile -ExecutionPolicy Bypass -File $chocoScript *> $null
-	Remove-Item $chocoScript -Force
-	$chocoInstalled = $true
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    $chocoScript = "$env:TEMP\install-choco.ps1"
+    Invoke-WebRequest -Uri "https://community.chocolatey.org/install.ps1" -OutFile $chocoScript -UseBasicParsing
+    powershell -NoProfile -ExecutionPolicy Bypass -File $chocoScript *> $null
+    Remove-Item $chocoScript -Force
+    $chocoInstalled = $true
 } catch {
-	Write-Host "Could not install Chocolatey: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Could not install Chocolatey: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 if ($chocoInstalled) {
-	choco install notepadplusplus.install --yes --no-progress *> $null
-	Write-Host "notepad++ installed"
-	choco install vscode --yes --no-progress *> $null
-	Write-Host "VSCode installed"
-	choco install intellijidea-ultimate --yes --no-progress *> $null
-	Write-Host "IntelliJ ultimate installed"
-	choco install cursoride --yes --no-progress *> $null
-	Write-Host "Cursor IDE installed"
+    choco install notepadplusplus.install --yes --no-progress *> $null
+    Write-Host "notepad++ installed"
+    choco install vscode --yes --no-progress *> $null
+    Write-Host "VSCode installed"
+    choco install intellijidea-ultimate --yes --no-progress *> $null
+    Write-Host "IntelliJ Ultimate installed"
+    choco install cursoride --yes --no-progress *> $null
+    Write-Host "Cursor IDE installed"
 }
 
-# Final Message
 Write-Host "`nWSL Full Dev Setup Complete."
