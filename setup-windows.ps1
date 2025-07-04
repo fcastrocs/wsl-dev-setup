@@ -1,26 +1,25 @@
-# ================================
-# WSL Full Dev Setup (PowerShell)
-# ================================
-# This script automates the complete setup of a full Windows Subsystem for Linux (WSL2)
-# development environment. It is designed for developers who want a clean, fast,
-# Linux-like setup on Windows 11. It must be run as Administrator.
-#
-# What this script does:
-# 1. Enables WSL2 and Virtual Machine Platform features
-# 2. Installs the latest WSL2 kernel
-# 3. Installs Windows Terminal
-# 4. Installs Ubuntu LTS via WSL
-# 5. Writes a `.wslconfig` file for performance
-# 6. Installs the Fira Code font
-# 7. Sets Windows Terminal settings to:
-#    - Default profile to Ubuntu
-#    - Font set to "Fira Code"
-#    - Color scheme to "One Half Dark"
-# 8. Runs a `setup-ubuntu.sh` script inside Ubuntu to install developer tools
-# 9. Installs Chocolatey and uses it to install key developer tools on Windows
-#
-# All steps are silent or minimal-interaction, making this ideal for scripting or onboarding automation.
-# ================================
+<#
+.SYNOPSIS
+    Full WSL Developer Setup Script for Windows 11
+
+.DESCRIPTION
+    Sets up a complete WSL-based dev environment:
+    - Installs WSL, Ubuntu, and latest WSL kernel
+    - Creates a passwordless sudo Linux user
+    - Optimizes WSL with .wslconfig
+    - Installs fonts, editors, and dev tools
+    - Configures FiraCode Nerd Font in supported editors
+    - Runs setup-ubuntu.sh inside WSL to install dev tools
+
+.INSTALLED TOOLS
+    - Chocolatey
+    - Windows Terminal
+    - Notepad++
+    - Visual Studio Code
+    - Cursor IDE
+    - JetBrains IntelliJ IDEA Ultimate
+    - FiraCode Nerd Font
+#>
 
 $linuxUser = "devuser"
 $fontName = "FiraCode Nerd Font"
@@ -559,7 +558,5 @@ Set-FiraCodeFontInEditors
 Set-WindowsTerminalSettings
 
 # additional packages can be added here. use Install-ChocoPackage or Install-WingetPackage
-
-
 
 Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
