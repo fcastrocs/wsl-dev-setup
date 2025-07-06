@@ -114,6 +114,14 @@ function Add-LinuxUserWithSudo {
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to create or configure user '$linuxUser'"
         }
+
+        # Confirm NOPASSWD works
+        wsl -d Ubuntu -- sudo -n true 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Passwordless sudo is NOT configured properly for '$linuxUser'." -ForegroundColor Red
+            Write-Host "Please verify /etc/sudoers.d/$linuxUser exists and is correct." -ForegroundColor Red
+            exit 1
+        }
     }
     catch {
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
