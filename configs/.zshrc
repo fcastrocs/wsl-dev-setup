@@ -103,7 +103,7 @@ alias kexec="kubectl exec -it"                               # Execute a command
 alias kport="kubectl port-forward"                           # Forward one or more local ports to a pod
 
 # Kubernetes tools
-# alias kt="kubetail"                                           # Stream logs from multiple pods  # Not installed in setup script
+alias kt="kubetail"                                           # Stream logs from multiple pods
 alias k9="k9s"                                               # Terminal-based Kubernetes dashboard
 alias tp="telepresence"                                      # Telepresence for local development
 

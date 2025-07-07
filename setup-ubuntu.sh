@@ -174,13 +174,13 @@ else
 	echo -e "\tTelepresence already installed"
 fi
 
-# # Install kubetail
-# if ! command_exists kubetail; then
-# 	echo -e "\tInstalling kubetail..."
-# 	silent_run bash -c "curl -sLo $HOME/.local/bin/kubetail https://raw.githubusercontent.com/johanhaleby/kubetail/master/kubetail && chmod +x $HOME/.local/bin/kubetail"
-# else
-# 	echo -e "\tkubetail already installed."
-# fi
+# Install kubetail
+if ! command_exists kubetail; then
+	echo -e "\tInstalling kubetail..."
+	silent_run bash -c 'curl -sS https://www.kubetail.com/install.sh | bash'
+else
+	echo -e "\tkubetail already installed."
+fi
 
 # ------------------------------------------------------------------------------------------------
 # Install Oh My Zsh and plugins
