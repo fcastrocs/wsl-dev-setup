@@ -12,7 +12,7 @@ plugins=(
     colored-man-pages
     docker
     kubectl
-    aws
+    # aws
     gh
     zsh-completions
     zsh-autosuggestions
@@ -22,24 +22,9 @@ plugins=(
 source "$ZSH/oh-my-zsh.sh"
 
 # ----------------------------------------
-# Homebrew Environment
-# ----------------------------------------
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
-# ----------------------------------------
-# Java & Maven Environment
-# ----------------------------------------
-export JAVA_HOME="/home/linuxbrew/.linuxbrew/opt/openjdk@21"
-export M2_HOME="/home/linuxbrew/.linuxbrew/opt/maven"
-
-# ----------------------------------------
 # PATH Configuration
 # ----------------------------------------
 PATH_ADDITIONS=(
-    "/home/linuxbrew/.linuxbrew/bin"
-    "/home/linuxbrew/.linuxbrew/sbin"
-    "${JAVA_HOME:+$JAVA_HOME/bin}"
-    "${M2_HOME:+$M2_HOME/bin}"
     "/usr/local/bin"
     "$HOME/.local/bin"
 )
@@ -92,13 +77,6 @@ zstyle ':completion:*' rehash true
 eval "$(starship init zsh)"
 
 # ----------------------------------------
-# Additional Tools Initialization
-# ----------------------------------------
-if command -v thefuck &>/dev/null; then
-    eval "$(thefuck --alias)"
-fi
-
-# ----------------------------------------
 # Aliases
 # ----------------------------------------
 
@@ -125,7 +103,7 @@ alias kexec="kubectl exec -it"                               # Execute a command
 alias kport="kubectl port-forward"                           # Forward one or more local ports to a pod
 
 # Kubernetes tools
-alias kt="kubetail"                                           # Stream logs from multiple pods
+# alias kt="kubetail"                                           # Stream logs from multiple pods  # Not installed in setup script
 alias k9="k9s"                                               # Terminal-based Kubernetes dashboard
 alias tp="telepresence"                                      # Telepresence for local development
 

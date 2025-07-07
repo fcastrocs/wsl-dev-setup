@@ -10,7 +10,6 @@ $git_branch\
 $git_status\
 $docker_context\
 $kubernetes\
-$aws\
 $java\
 $package\
 $nodejs\
@@ -80,7 +79,7 @@ disabled = false
 symbol = "☁️ "
 style = "bold yellow"
 format = '[$symbol($profile)(\($region\))]($style) '
-disabled = false
+disabled = true  # Commented out aws plugin in .zshrc
 
 # ───────────────────────────────
 # Java Version
@@ -125,15 +124,3 @@ style = "cyan"
 min_time = 500
 format = "🕒 [$duration]($style) "
 style = "bold yellow"
-
-# ───────────────────────────────
-# Custom Tools (Optional Extras)
-# ───────────────────────────────
-[terraform]
-symbol = "💠"
-
-[helm]
-symbol = "⎈"
-
-[git_metrics]
-disabled = false

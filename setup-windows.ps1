@@ -21,14 +21,128 @@
     - FiraCode Nerd Font
 #>
 
+$distro = "Ubuntu"
 $linuxUser = "devuser"
 $fontName = "FiraCode Nerd Font"
+$gitHubUri = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main"
 
+# Utility function to copy or download files into WSL Home directory
+function Send-FileToWsl {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$localPath,
+        [Parameter(Mandatory = $true)]
+        [string]$remoteUrl,
+        [Parameter(Mandatory = $true)]
+        [string]$targetPath
+    )
+
+    # Convert to WSL user home path
+    $targetPath = "/home/$linuxUser/$($targetPath -replace '\\', '/' -replace '^/+', '')"
+    $targetDir = (Split-Path $targetPath -Parent) -replace '\\', '/'
+    try {
+        $result = wsl -d $distro -- bash -c "mkdir -p '$targetDir'" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create target directory: '$targetDir'. Error: $result"
+        }
+        
+        if (Test-Path $localPath) {
+            # Copy local file into WSL using base64 to preserve Unicode characters
+            $bytes = [System.IO.File]::ReadAllBytes($localPath)
+            $base64 = [Convert]::ToBase64String($bytes)
+            $result = wsl -d $distro -- bash -c "echo '$base64' | base64 -d > '$targetPath'" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to copy local file to WSL: $localPath. Error: $result"
+            }
+
+            Write-Host "`tLocal file copied to WSL: $targetPath" -ForegroundColor DarkGray
+
+        }
+        else {
+            # Download remote file into WSL
+            $result = wsl -d $distro -- bash -c "curl -fsSL '$remoteUrl' -o '$targetPath'" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to download $(Split-Path $targetPath -Leaf) from $remoteUrl. Error: $result"
+            }
+
+            Write-Host "`tRemote file downloaded to WSL: $targetPath" -ForegroundColor DarkGray
+        }
+        
+        # Set ownership of the target file
+        $result = wsl -d $distro -- bash -c "chown ${linuxUser}:${linuxUser} '$targetPath'" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set ownership of file: '$targetPath'. Error: $result"
+        }
+    }
+    catch {
+        throw "Send-FileToWsl failed: $($_.Exception.Message)"
+    }
+}
 
 function Test-RunningAsAdministrator {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-Host "ERROR: This script must be run as Administrator!" -ForegroundColor Red
         Write-Host "Please right-click PowerShell and select 'Run as Administrator'"
+        exit 1
+    }
+}
+
+function Install-ChocoPackage {
+    param (
+        [Parameter(Mandatory)]
+        [string]$PackageName
+    )
+
+    Write-Host "`n - Installing package: $PackageName..."
+
+    # Only check locally installed packages
+    $isInstalled = choco list | Select-String -Pattern "^$PackageName\s" -Quiet
+
+    try {
+        if ($isInstalled) {
+            choco upgrade $PackageName -y *> $null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Upgrade failed for package '$PackageName'"
+            }
+        }
+        else {
+            choco install $PackageName -y *> $null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Install failed for package '$PackageName'"
+            }
+        }
+    }
+    catch {
+        Write-Host "  Chocolatey command failed: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Install-WingetPackage {
+    param (
+        [Parameter(Mandatory)]
+        [string]$PackageId
+    )
+
+    Write-Host "`n - Installing package: $PackageId..."
+
+    try {
+        # Escape special characters for Select-String (like +, ., etc.)
+        $escapedId = [Regex]::Escape($PackageId)
+
+        # Check if the package is already installed
+        $installed = winget list --id "$PackageId" --source winget 2>$null | Select-String "$escapedId" -Quiet
+
+        if (-not $installed) {
+            # Install the package silently
+            winget install --id "$PackageId" -e -h --accept-source-agreements --accept-package-agreements *> $null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Install failed for package '$PackageId'"
+            }
+        }
+    }
+    catch {
+        Write-Host "  Winget command failed: $($_.Exception.Message)" -ForegroundColor Red
         exit 1
     }
 }
@@ -192,7 +306,6 @@ vmIdleTimeout=0
 
 function Invoke-WSLSetupScript {
     param (
-        [string]$distro = "Ubuntu",
         [string]$localScriptPath = "$PSScriptRoot\setup-ubuntu.sh",
         [string]$remoteScriptUrl = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-ubuntu.sh"
     )
@@ -200,21 +313,13 @@ function Invoke-WSLSetupScript {
     Write-Host "`n - Installing developer tools in WSL..."
 
     try {
-        # Prepare setup directory in WSL
-        wsl -d $distro -- bash -c "mkdir -p ~/setup && rm -f ~/setup/wsl-init.sh"
-
-        if (Test-Path $localScriptPath) {
-            Get-Content $localScriptPath -Raw | wsl -d $distro -- bash -c "cat > ~/setup/wsl-init.sh"
-        }
-        else {
-            wsl -d $distro -- bash -c "curl -fsSL '$remoteScriptUrl' -o ~/setup/wsl-init.sh"
-        }
+        Send-FileToWsl $localScriptPath $remoteScriptUrl "setup/wsl-init.sh"
 
         # Execute setup script
-        wsl -d $distro -- bash -c "chmod +x ~/setup/wsl-init.sh && ~/setup/wsl-init.sh"
+        wsl -d $distro -- bash -c "chmod +x /home/$linuxUser/setup/wsl-init.sh && /home/$linuxUser/setup/wsl-init.sh"
 
         # Cleanup
-        wsl -d $distro -- bash -c "rm -rf ~/setup"
+        wsl -d $distro -- bash -c "rm -rf /home/$linuxUser/setup"
         wsl --shutdown
     }
     catch {
@@ -247,66 +352,6 @@ function Install-Chocolatey {
     }
     catch {
         Write-Host "  Chocolatey installation failed: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
-    }
-}
-
-function Install-ChocoPackage {
-    param (
-        [Parameter(Mandatory)]
-        [string]$PackageName
-    )
-
-    Write-Host "`n - Installing package: $PackageName..."
-
-    # Only check locally installed packages
-    $isInstalled = choco list | Select-String -Pattern "^$PackageName\s" -Quiet
-
-    try {
-        if ($isInstalled) {
-            choco upgrade $PackageName -y *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Upgrade failed for package '$PackageName'"
-            }
-        }
-        else {
-            choco install $PackageName -y *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Install failed for package '$PackageName'"
-            }
-        }
-    }
-    catch {
-        Write-Host "  Chocolatey command failed: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
-    }
-}
-
-function Install-WingetPackage {
-    param (
-        [Parameter(Mandatory)]
-        [string]$PackageId
-    )
-
-    Write-Host "`n - Installing package: $PackageId..."
-
-    try {
-        # Escape special characters for Select-String (like +, ., etc.)
-        $escapedId = [Regex]::Escape($PackageId)
-
-        # Check if the package is already installed
-        $installed = winget list --id "$PackageId" --source winget 2>$null | Select-String "$escapedId" -Quiet
-
-        if (-not $installed) {
-            # Install the package silently
-            winget install --id "$PackageId" -e -h --accept-source-agreements --accept-package-agreements *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Install failed for package '$PackageId'"
-            }
-        }
-    }
-    catch {
-        Write-Host "  Winget command failed: $($_.Exception.Message)" -ForegroundColor Red
         exit 1
     }
 }
@@ -361,7 +406,6 @@ function Install-NerdFontFiraCode {
         Write-Host "FiraCode Nerd Font installation failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
-
 
 function Start-And-Close-EditorsWhenReady {
     Write-Host "`n - Getting things ready to set FiraCode Nerd Font in editors..."
@@ -536,6 +580,25 @@ function Set-WindowsTerminalSettings {
     }
 }
 
+function Add-Zshrc-Starship-Configs {
+    $localConfigPath = "$PSScriptRoot/configs"
+    $remoteZshrcUrl = $gitHubUri + "/configs/.zshrc"
+    $remoteStarshipUrl = $gitHubUri + "/configs/starship.toml"
+
+    Write-Host "`n - Setting .zshrc and starship.toml configs into WSL..."
+
+    try {
+        $targetDir = ".config"
+
+        Send-FileToWsl "$localConfigPath/.zshrc" "$remoteZshrcUrl" ".zshrc"
+        Send-FileToWsl "$localConfigPath/starship.toml" "$remoteStarshipUrl" "$targetDir/starship.toml"
+    }
+    catch {
+        Write-Host "   Failed to install .zshrc: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+}
+
 Write-Host "`n==============================="
 Write-Host " WSL Full Developer Setup Starting"
 Write-Host "==============================="
@@ -549,6 +612,7 @@ Install-Ubuntu
 Add-LinuxUserWithSudo
 Set-DefaultWSLUser
 Write-WSLConfig
+Add-Zshrc-Starship-Configs
 Invoke-WSLSetupScript
 
 # Install tools via Chocolatey or Winget
