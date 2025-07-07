@@ -1,11 +1,12 @@
 #!/bin/bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
+mkdir -p ~/tmp && cd ~/tmp
 
 # ------------------------------------------------------------------------------------------------
 # Utility Functions
 # ------------------------------------------------------------------------------------------------
-function silent_run {
+function silent_run() {
 	local temp_file
 	temp_file=$(mktemp)
 	local exit_code=0
@@ -24,24 +25,24 @@ function silent_run {
 	return $exit_code
 }
 
-function command_exists {
+function command_exists() {
 	command -v "$1" >/dev/null 2>&1
 }
 
-function is_apt_installed {
+function is_apt_installed() {
 	dpkg -l "$1" 2>/dev/null | grep -q "^ii"
 }
 
-function install_packages {
+function install_packages() {
 	local packages=("$@")
 	local packages_to_install=()
-	
+
 	for pkg in "${packages[@]}"; do
 		if ! is_apt_installed "$pkg"; then
 			packages_to_install+=("$pkg")
 		fi
 	done
-	
+
 	if [ ${#packages_to_install[@]} -gt 0 ]; then
 		echo -e "\tInstalling packages: ${packages_to_install[*]}..."
 		silent_run sudo apt-get install -y "${packages_to_install[@]}"
@@ -86,7 +87,7 @@ silent_run sudo install -m 0755 -d /etc/apt/keyrings
 if ! command_exists docker; then
 	silent_run sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 	silent_run sudo chmod a+r /etc/apt/keyrings/docker.asc
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
 fi
 
 # Add GitHub CLI repository
@@ -95,7 +96,7 @@ if ! command_exists gh; then
 	silent_run sudo install -m 644 /tmp/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
 	silent_run rm /tmp/githubcli-archive-keyring.gpg
 	silent_run sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
 fi
 
 # Add Kubernetes repository for kubectl
@@ -104,7 +105,7 @@ if ! command_exists kubectl; then
 	silent_run sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
 	silent_run rm /tmp/kubernetes-release.key
 	silent_run sudo chmod go+r /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
 fi
 
 # Update package lists after adding repositories
@@ -119,39 +120,26 @@ REPO_PACKAGES=(
 install_packages "${REPO_PACKAGES[@]}"
 
 # ------------------------------------------------------------------------------------------------
-# Configure Docker
+# Install packages from source
 # ------------------------------------------------------------------------------------------------
-# Add user to docker group
-if command_exists docker; then
-	silent_run sudo usermod -aG docker $USER
-fi
 
-# Start and enable Docker service
-if command_exists docker; then
-	silent_run sudo systemctl enable docker
-	silent_run sudo systemctl start docker
-fi
-
-# ------------------------------------------------------------------------------------------------
-# Install dev packages from source
-# ------------------------------------------------------------------------------------------------
 # Install k9s
 if ! command_exists k9s; then
 	echo -e "\tInstalling k9s..."
-	K9S_VERSION=$(curl -s https://api.github.com/repos/derailed/k9s/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-	silent_run curl -L -o k9s_linux_amd64.deb "https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_amd64.deb"
-	silent_run sudo apt-get install -y ./k9s_linux_amd64.deb
-	rm -f k9s_linux_amd64.deb
+	silent_run curl -LO https://github.com/derailed/k9s/releases/latest/download/k9s_linux_amd64.tar.gz
+	silent_run tar -xzf k9s_linux_amd64.tar.gz
+	silent_run chmod a+x k9s
+	silent_run sudo mv k9s /usr/local/bin/
 else
 	echo -e "\tk9s already installed."
 fi
 
 # Install Telepresence
-TELEP_BIN="/usr/local/bin/telepresence"
-if [ ! -x "$TELEP_BIN" ]; then
+if ! command_exists telepresence; then
 	echo -e "\tInstalling Telepresence..."
-	silent_run sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o "$TELEP_BIN"
-	silent_run sudo chmod a+x "$TELEP_BIN"
+	silent_run curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o telepresence
+	silent_run chmod a+x telepresence
+	silent_run sudo mv telepresence /usr/local/bin/
 else
 	echo -e "\tTelepresence already installed"
 fi
@@ -162,6 +150,20 @@ if ! command_exists kubetail; then
 	silent_run bash -c 'curl -sS https://www.kubetail.com/install.sh | bash'
 else
 	echo -e "\tkubetail already installed."
+fi
+
+# ------------------------------------------------------------------------------------------------
+# Configure things
+# ------------------------------------------------------------------------------------------------
+# Add user to docker group
+if command_exists docker; then
+	silent_run sudo usermod -aG docker $USER
+fi
+
+# Start and enable Docker service
+if command_exists docker; then
+	silent_run sudo systemctl enable docker
+	silent_run sudo systemctl start docker
 fi
 
 # ------------------------------------------------------------------------------------------------
@@ -187,12 +189,10 @@ silent_run git clone https://github.com/zsh-users/zsh-completions \
 # ------------------------------------------------------------------------------------------------
 if ! command_exists starship; then
 	echo -e "\tInstalling Starship prompt..."
-	tmpfile=$(mktemp)
-	silent_run curl -sL https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-gnu.tar.gz -o "$tmpfile"
-	silent_run tar -xzf "$tmpfile" -C /tmp
-	silent_run sudo mv /tmp/starship /usr/local/bin
-	silent_run sudo chmod +x /usr/local/bin/starship
-	silent_run rm "$tmpfile"
+	silent_run curl -LO https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-gnu.tar.gz
+	silent_run tar -xzf starship-x86_64-unknown-linux-gnu.tar.gz
+	silent_run chmod a+x starship
+	silent_run sudo mv starship /usr/local/bin/
 else
 	echo -e "\tStarship already installed."
 fi
@@ -214,7 +214,10 @@ else
 fi
 
 # ------------------------------------------------------------------------------------------------
-# Final Output
+# Clean up
 # ------------------------------------------------------------------------------------------------
+rm -rf ~/tmp
+
+# end of script
 echo
 echo -e "\tUbuntu setup complete."
