@@ -2,15 +2,6 @@
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
-# ----------------------------------------
-# Switch to devuser if not already running as devuser
-# ----------------------------------------
-CURRENT_USER=$(whoami)
-if [[ "$CURRENT_USER" != "devuser" ]]; then
-	echo -e "\tSwitching to devuser..."
-	exec sudo -u devuser -i bash "$0" "$@"
-fi
-
 # ------------------------------------------------------------------------------------------------
 # Utility Functions
 # ------------------------------------------------------------------------------------------------
@@ -196,8 +187,7 @@ fi
 # ------------------------------------------------------------------------------------------------
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
 	echo -e "\tInstalling Oh My Zsh..."
-	export RUNZSH=no KEEP_ZSHRC=yes
-	silent_run sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+	silent_run bash -c 'export RUNZSH=no; export KEEP_ZSHRC=yes; curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash'
 else
 	echo -e "\tOh My Zsh already installed."
 fi

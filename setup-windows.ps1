@@ -1,33 +1,28 @@
-<#
-.SYNOPSIS
-    Full WSL Developer Setup Script for Windows 11
+$DISTRO = "Ubuntu"
+$LINUX_USER = "devuser"
+$FONT_NAME = "FiraCode Nerd Font"
+$GITHUB_URI = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main"
 
-.DESCRIPTION
-    Sets up a complete WSL-based dev environment:
-    - Installs WSL, Ubuntu, and latest WSL kernel
-    - Creates a passwordless sudo Linux user
-    - Optimizes WSL with .wslconfig
-    - Installs fonts, editors, and dev tools
-    - Configures FiraCode Nerd Font in supported editors
-    - Runs setup-ubuntu.sh inside WSL to install dev tools
+# Run a command in WSL as $LINUX_USER
+function Invoke-Wsl {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Command
+    )
 
-.INSTALLED TOOLS
-    - Chocolatey
-    - Windows Terminal
-    - Notepad++
-    - Visual Studio Code
-    - Cursor IDE
-    - JetBrains IntelliJ IDEA Ultimate
-    - FiraCode Nerd Font
-#>
+    $bashCommand = "`"$Command`""
 
-$distro = "Ubuntu"
-$linuxUser = "devuser"
-$fontName = "FiraCode Nerd Font"
-$gitHubUri = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main"
+    $wslArgs = @(
+        '-d', $distro,
+        '-u', $LINUX_USER,
+        '--', 'bash', '-c', $bashCommand
+    )
 
-# Utility function to copy or download files into WSL Home directory
-function Send-FileToWsl {
+    return wsl @wslArgs
+}
+
+# Send a file to WSL home directory
+function Send-ToWslHome {
     param (
         [Parameter(Mandatory = $true)]
         [string]$localPath,
@@ -38,10 +33,10 @@ function Send-FileToWsl {
     )
 
     # Convert to WSL user home path
-    $targetPath = "/home/$linuxUser/$($targetPath -replace '\\', '/' -replace '^/+', '')"
+    $targetPath = "/home/$LINUX_USER/$($targetPath -replace '\\', '/' -replace '^/+', '')"
     $targetDir = (Split-Path $targetPath -Parent) -replace '\\', '/'
     try {
-        $result = wsl -d $distro -- bash -c "mkdir -p '$targetDir'" 2>&1
+        $result = Invoke-Wsl "mkdir -p '$targetDir'" 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to create target directory: '$targetDir'. Error: $result"
         }
@@ -50,7 +45,7 @@ function Send-FileToWsl {
             # Copy local file into WSL using base64 to preserve Unicode characters
             $bytes = [System.IO.File]::ReadAllBytes($localPath)
             $base64 = [Convert]::ToBase64String($bytes)
-            $result = wsl -d $distro -- bash -c "echo '$base64' | base64 -d > '$targetPath'" 2>&1
+            $result = Invoke-Wsl "echo '$base64' | base64 -d > '$targetPath'" 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to copy local file to WSL: $localPath. Error: $result"
             }
@@ -60,22 +55,16 @@ function Send-FileToWsl {
         }
         else {
             # Download remote file into WSL
-            $result = wsl -d $distro -- bash -c "curl -fsSL '$remoteUrl' -o '$targetPath'" 2>&1
+            $result = Invoke-Wsl "curl -fsSL '$remoteUrl' -o '$targetPath'" 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to download $(Split-Path $targetPath -Leaf) from $remoteUrl. Error: $result"
             }
 
             Write-Host "`tRemote file downloaded to WSL: $targetPath" -ForegroundColor DarkGray
         }
-        
-        # Set ownership of the target file
-        $result = wsl -d $distro -- bash -c "chown ${linuxUser}:${linuxUser} '$targetPath'" 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to set ownership of file: '$targetPath'. Error: $result"
-        }
     }
     catch {
-        throw "Send-FileToWsl failed: $($_.Exception.Message)"
+        throw "Send-ToWslHome failed: $($_.Exception.Message)"
     }
 }
 
@@ -102,13 +91,14 @@ function Install-ChocoPackage {
         if ($isInstalled) {
             choco upgrade $PackageName -y *> $null
             if ($LASTEXITCODE -ne 0) {
-                throw "Upgrade failed for package '$PackageName'"
+                throw "`tUpgrade failed for package '$PackageName'"
             }
+            Write-Host "`tPackage '$PackageName' upgraded." -ForegroundColor DarkGray
         }
         else {
             choco install $PackageName -y *> $null
             if ($LASTEXITCODE -ne 0) {
-                throw "Install failed for package '$PackageName'"
+                throw "`tInstall failed for package '$PackageName'"
             }
         }
     }
@@ -182,58 +172,58 @@ function Install-WSLKernel {
     }
 }
 
-function Install-Ubuntu {
-    Write-Host "`n - Installing Ubuntu LTS..."
+function Install-Distro {
+    Write-Host "`n - Installing $DISTRO..."
 
     try {
-        $ubuntuInstalled = wsl -l -q 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq "Ubuntu" }
+        $distroInstalled = wsl -l -q 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $DISTRO }
 
-        if (-not $ubuntuInstalled) {
-            wsl --install -d Ubuntu --no-launch *> $null
+        if (-not $distroInstalled) {
+            wsl --install -d $DISTRO --no-launch *> $null
             if ($LASTEXITCODE -ne 0) {
-                throw "Ubuntu installation failed (exit code $LASTEXITCODE)"
+                throw "$DISTRO installation failed (exit code $LASTEXITCODE)"
             }
         }
 
-        # Check if Ubuntu is initialized
-        wsl -d Ubuntu -- echo "Ubuntu initialized" *> $null
+        # Check if distro is initialized
+        wsl -d $DISTRO -- echo "$DISTRO initialized" *> $null
         if ($LASTEXITCODE -ne 0) {
-            throw "Ubuntu failed to initialize (exit code $LASTEXITCODE)"
+            throw "$DISTRO failed to initialize (exit code $LASTEXITCODE)"
         }
     }
     catch {
-        Write-Host "Error: Failed to check, install, or initialize Ubuntu - $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Error: Failed to check, install, or initialize $DISTRO - $($_.Exception.Message)" -ForegroundColor Red
         exit 1
     }
 }
 
 function Add-LinuxUserWithSudo {
-    Write-Host "`n - Creating user '$linuxUser' with passwordless sudo..."
+    Write-Host "`n - Creating user '$LINUX_USER' with passwordless sudo..."
 
     try {
-        # Check if the user already exists inside Ubuntu
-        $userExists = wsl -d Ubuntu -- bash -c "id -u $linuxUser >/dev/null 2>&1 && echo yes || echo no" |
+        # Check if the user already exists inside distro
+        $userExists = wsl -d $DISTRO -- bash -c "id -u $LINUX_USER >/dev/null 2>&1 && echo yes || echo no" |
         ForEach-Object { $_.Trim() }
 
         if ($userExists -eq "yes") {
-            $command = "sudo usermod -aG sudo $linuxUser; echo '$linuxUser ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$linuxUser > /dev/null; sudo chmod 0440 /etc/sudoers.d/$linuxUser"
+            $command = "sudo usermod -aG sudo $LINUX_USER; echo '$LINUX_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$LINUX_USER > /dev/null; sudo chmod 0440 /etc/sudoers.d/$LINUX_USER"
         }
         else {
-            $command = "sudo adduser --disabled-password --gecos '' $linuxUser; echo '$linuxUser ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$linuxUser > /dev/null; sudo usermod -aG sudo $linuxUser; sudo chmod 0440 /etc/sudoers.d/$linuxUser"
+            $command = "sudo adduser --disabled-password --gecos '' $LINUX_USER; echo '$LINUX_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$LINUX_USER > /dev/null; sudo usermod -aG sudo $LINUX_USER; sudo chmod 0440 /etc/sudoers.d/$LINUX_USER"
         }
 
         # Pass it into WSL with proper quoting
-        wsl -d Ubuntu -- bash -c "`"$command`"" *> $null
+        wsl -d $DISTRO -- bash -c "`"$command`"" *> $null
 
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create or configure user '$linuxUser'"
+            throw "Failed to create or configure user '$LINUX_USER'"
         }
 
         # Confirm NOPASSWD works
-        wsl -d Ubuntu -- sudo -n true 2>$null
+        wsl -d $DISTRO -- sudo -n true 2>$null
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Passwordless sudo is NOT configured properly for '$linuxUser'." -ForegroundColor Red
-            Write-Host "Please verify /etc/sudoers.d/$linuxUser exists and is correct." -ForegroundColor Red
+            Write-Host "Passwordless sudo is NOT configured properly for '$LINUX_USER'." -ForegroundColor Red
+            Write-Host "Please verify /etc/sudoers.d/$LINUX_USER exists and is correct." -ForegroundColor Red
             exit 1
         }
     }
@@ -244,22 +234,22 @@ function Add-LinuxUserWithSudo {
 }
 
 function Set-DefaultWSLUser {
-    Write-Host "`n - Setting '$linuxUser' as default WSL user..."
+    Write-Host "`n - Setting '$LINUX_USER' as default WSL user..."
 
     try {
         $lxssPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
         $guid = (Get-ItemProperty "$lxssPath\*" |
-            Where-Object { $_.DistributionName -eq "Ubuntu" }).PSChildName
+            Where-Object { $_.DistributionName -eq $DISTRO }).PSChildName
 
         if (-not $guid) {
-            throw "Ubuntu not found in registry."
+            throw "$DISTRO not found in registry."
         }
 
-        $uid = wsl -d Ubuntu -- bash -c "id -u $linuxUser" 2>$null
+        $uid = wsl -d $DISTRO -- bash -c "id -u $LINUX_USER" 2>$null
         $uid = $uid.Trim()
 
         if (-not ($uid -match '^\d+$')) {
-            throw "User '$linuxUser' returned invalid UID: '$uid'"
+            throw "User '$LINUX_USER' returned invalid UID: '$uid'"
         }
 
         Set-ItemProperty -Path "$lxssPath\$guid" -Name DefaultUid -Value ([int]$uid) -ErrorAction Stop
@@ -297,7 +287,7 @@ kernelCommandLine=quiet elevator=noop
 vmIdleTimeout=0
 "@ | Set-Content -Encoding UTF8 -Path $configPath -Force
 
-        Write-Host "`t.wslconfig written with $allocMem GB and $cpuCount CPUs." -ForegroundColor Green
+        Write-Host "`t.wslconfig written with $allocMem GB and $cpuCount CPUs." -ForegroundColor DarkGray
     }
     catch {
         Write-Host "Failed to write .wslconfig: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -307,19 +297,19 @@ vmIdleTimeout=0
 function Invoke-WSLSetupScript {
     param (
         [string]$localScriptPath = "$PSScriptRoot\setup-ubuntu.sh",
-        [string]$remoteScriptUrl = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-ubuntu.sh"
+        [string]$remoteScriptUrl = "$GITHUB_URI/setup-ubuntu.sh"
     )
 
     Write-Host "`n - Installing developer tools in WSL..."
 
     try {
-        Send-FileToWsl $localScriptPath $remoteScriptUrl "setup/wsl-init.sh"
+        Send-ToWslHome $localScriptPath $remoteScriptUrl "setup/wsl-init.sh"
 
         # Execute setup script
-        wsl -d $distro -- bash -c "chmod +x /home/$linuxUser/setup/wsl-init.sh && /home/$linuxUser/setup/wsl-init.sh"
+        Invoke-Wsl "chmod +x /home/$LINUX_USER/setup/wsl-init.sh && /home/$LINUX_USER/setup/wsl-init.sh"
 
         # Cleanup
-        wsl -d $distro -- bash -c "rm -rf /home/$linuxUser/setup"
+        Invoke-Wsl "rm -rf /home/$LINUX_USER/setup"
         wsl --shutdown
     }
     catch {
@@ -485,14 +475,14 @@ function Set-FiraCodeFontInEditors {
         try {
             if (-not (Test-Path $path)) {
                 New-Item -Path (Split-Path $path) -ItemType Directory -Force | Out-Null
-                $settings = @{ editor = @{ fontFamily = $fontName; fontSize = $fontSize; fontLigatures = $true } }
+                $settings = @{ editor = @{ fontFamily = $FONT_NAME; fontSize = $fontSize; fontLigatures = $true } }
             }
             else {
                 $json = Get-Content $path -Raw
                 $settings = $json | ConvertFrom-Json -ErrorAction Stop
 
                 if (-not $settings.editor) { $settings | Add-Member -MemberType NoteProperty -Name editor -Value @{} }
-                $settings.editor.fontFamily = $fontName
+                $settings.editor.fontFamily = $FONT_NAME
                 $settings.editor.fontSize = $fontSize
                 $settings.editor.fontLigatures = $true
             }
@@ -516,7 +506,7 @@ function Set-FiraCodeFontInEditors {
 
                 # Replace fontName and fontSize safely
                 $patched = $original `
-                    -replace 'fontName="[^"]*"', "fontName=`"$fontName`"" `
+                    -replace 'fontName="[^"]*"', "fontName=`"$FONT_NAME`"" `
                     -replace 'fontSize="[^"]*"', 'fontSize="11"'
 
                 $newContent = $content -replace [regex]::Escape($original), [regex]::Escape($patched) -replace '\\', ''
@@ -561,12 +551,12 @@ function Set-WindowsTerminalSettings {
             $json.profiles.defaults | Add-Member -MemberType NoteProperty -Name colorScheme -Value ""
         }
 
-        $json.profiles.defaults.font.face = $fontName
+        $json.profiles.defaults.font.face = $FONT_NAME
         $json.profiles.defaults.colorScheme = "One Half Dark"
 
-        # Set defaultProfile to Ubuntu if found
+        # Set defaultProfile to $DISTRO if found
         $ubuntu = $json.profiles.list | Where-Object {
-            $_.name -eq "Ubuntu" -or ($_.source -like "*WSL*" -and $_.name -like "*Ubuntu*")
+            $_.name -eq $DISTRO -or ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO*")
         } | Select-Object -First 1
 
         if ($ubuntu -and $ubuntu.guid) {
@@ -580,18 +570,18 @@ function Set-WindowsTerminalSettings {
     }
 }
 
-function Add-Zshrc-Starship-Configs {
+function Set-WslZshEnvironment {
     $localConfigPath = "$PSScriptRoot/configs"
-    $remoteZshrcUrl = $gitHubUri + "/configs/.zshrc"
-    $remoteStarshipUrl = $gitHubUri + "/configs/starship.toml"
+    $remoteZshrcUrl = $GITHUB_URI + "/configs/.zshrc"
+    $remoteStarshipUrl = $GITHUB_URI + "/configs/starship.toml"
 
     Write-Host "`n - Setting .zshrc and starship.toml configs into WSL..."
 
     try {
         $targetDir = ".config"
 
-        Send-FileToWsl "$localConfigPath/.zshrc" "$remoteZshrcUrl" ".zshrc"
-        Send-FileToWsl "$localConfigPath/starship.toml" "$remoteStarshipUrl" "$targetDir/starship.toml"
+        Send-ToWslHome "$localConfigPath/.zshrc" "$remoteZshrcUrl" ".zshrc"
+        Send-ToWslHome "$localConfigPath/starship.toml" "$remoteStarshipUrl" "$targetDir/starship.toml"
     }
     catch {
         Write-Host "   Failed to install .zshrc: $($_.Exception.Message)" -ForegroundColor Red
@@ -599,20 +589,20 @@ function Add-Zshrc-Starship-Configs {
     }
 }
 
-Write-Host "`n==============================="
-Write-Host " WSL Full Developer Setup Starting"
-Write-Host "==============================="
+Write-Host "`n========================================================" -ForegroundColor DarkYellow
+Write-Host "         WSL Full Developer Setup Starting" -ForegroundColor DarkYellow
+Write-Host "========================================================" -ForegroundColor DarkYellow
 
 Test-RunningAsAdministrator
 
 # Install and setup WSL
 Enable-WSLFeatures
 Install-WSLKernel
-Install-Ubuntu
+Install-Distro
 Add-LinuxUserWithSudo
 Set-DefaultWSLUser
 Write-WSLConfig
-Add-Zshrc-Starship-Configs
+Set-WslZshEnvironment
 Invoke-WSLSetupScript
 
 # Install tools via Chocolatey or Winget
@@ -628,7 +618,5 @@ Install-NerdFontFiraCode
 Start-And-Close-EditorsWhenReady
 Set-FiraCodeFontInEditors
 Set-WindowsTerminalSettings
-
-# additional packages can be added here. use Install-ChocoPackage or Install-WingetPackage
 
 Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
