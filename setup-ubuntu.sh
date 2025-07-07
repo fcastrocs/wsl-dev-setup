@@ -79,9 +79,11 @@ install_packages "${PREREQ_PACKAGES[@]}"
 # ------------------------------------------------------------------------------------------------
 echo -e "\tAdding additional repositories..."
 
+# Ensure keyrings directory exists
+silent_run sudo install -m 0755 -d /etc/apt/keyrings
+
 # Add Docker repository
 if ! command_exists docker; then
-	silent_run sudo install -m 0755 -d /etc/apt/keyrings
 	silent_run sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 	silent_run sudo chmod a+r /etc/apt/keyrings/docker.asc
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
@@ -89,21 +91,19 @@ fi
 
 # Add GitHub CLI repository
 if ! command_exists gh; then
-	silent_run sudo mkdir -p -m 755 /etc/apt/keyrings
 	silent_run curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /tmp/githubcli-archive-keyring.gpg
 	silent_run sudo install -m 644 /tmp/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
 	silent_run rm /tmp/githubcli-archive-keyring.gpg
 	silent_run sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
-		sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 fi
 
 # Add Kubernetes repository for kubectl
 if ! command_exists kubectl; then
-	silent_run sudo mkdir -p -m 755 /etc/apt/keyrings
 	silent_run curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -o /tmp/kubernetes-release.key
 	silent_run sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
 	silent_run rm /tmp/kubernetes-release.key
+	silent_run sudo chmod go+r /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
 fi
 
@@ -130,24 +130,6 @@ fi
 if command_exists docker; then
 	silent_run sudo systemctl enable docker
 	silent_run sudo systemctl start docker
-fi
-
-# ------------------------------------------------------------------------------------------------
-# Configure shell
-# ------------------------------------------------------------------------------------------------
-echo -e "\tConfiguring shell..."
-if [[ "$SHELL" != *"zsh" ]]; then
-	ZSH_PATH=$(which zsh)
-	if ! grep -q "$ZSH_PATH" /etc/shells; then
-		echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
-	fi
-	if silent_run sudo chsh -s "$ZSH_PATH" "$USER"; then
-		echo -e "\tZsh set as default shell. You may need to log out and back in."
-	else
-		echo -e "\tFailed to set zsh as default shell. You can do this manually with: chsh -s $ZSH_PATH"
-	fi
-else
-	echo -e "\tZsh is already the default shell."
 fi
 
 # ------------------------------------------------------------------------------------------------
@@ -216,7 +198,23 @@ else
 fi
 
 # ------------------------------------------------------------------------------------------------
+# Set zsh as default shell
+# ------------------------------------------------------------------------------------------------
+echo -e "\tSetting zsh as default shell..."
+if [[ "$SHELL" != *"zsh" ]]; then
+	ZSH_PATH=$(which zsh)
+	if ! grep -q "$ZSH_PATH" /etc/shells; then
+		echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
+	fi
+	if ! silent_run sudo chsh -s "$ZSH_PATH" "$USER"; then
+		echo -e "\tFailed to set zsh as default shell. You can do this manually with: chsh -s $ZSH_PATH"
+	fi
+else
+	echo -e "\tZsh is already the default shell."
+fi
+
+# ------------------------------------------------------------------------------------------------
 # Final Output
 # ------------------------------------------------------------------------------------------------
 echo
-echo -e "\tSetup complete."
+echo -e "\tUbuntu setup complete."
