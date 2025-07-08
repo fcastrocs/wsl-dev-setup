@@ -86,26 +86,27 @@ silent_run sudo install -m 0755 -d /etc/apt/keyrings
 # Add Docker repository
 if ! command_exists docker; then
 	silent_run sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-	silent_run sudo chmod a+r /etc/apt/keyrings/docker.asc
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+	silent_run sudo chmod go+r /etc/apt/keyrings/docker.asc
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release &&
+		echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
 fi
 
 # Add GitHub CLI repository
 if ! command_exists gh; then
-	silent_run curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /tmp/githubcli-archive-keyring.gpg
-	silent_run sudo install -m 644 /tmp/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
-	silent_run rm /tmp/githubcli-archive-keyring.gpg
+	silent_run curl -fsSLO https://cli.github.com/packages/githubcli-archive-keyring.gpg
+	silent_run sudo install -m 644 githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
 	silent_run sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+		sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
 fi
 
 # Add Kubernetes repository for kubectl
 if ! command_exists kubectl; then
-	silent_run curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -o /tmp/kubernetes-release.key
-	silent_run sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
-	silent_run rm /tmp/kubernetes-release.key
+	silent_run curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -o kubernetes-release.key
+	silent_run sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg kubernetes-release.key
 	silent_run sudo chmod go+r /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
+	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' |
+		sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
 fi
 
 # Update package lists after adding repositories
