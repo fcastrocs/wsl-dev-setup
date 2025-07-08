@@ -127,7 +127,7 @@ install_packages "${REPO_PACKAGES[@]}"
 # Install k9s
 if ! command_exists k9s; then
 	echo -e "\tInstalling k9s..."
-	silent_run curl -LO https://github.com/derailed/k9s/releases/latest/download/k9s_linux_amd64.tar.gz
+	silent_run curl -fsSLO https://github.com/derailed/k9s/releases/latest/download/k9s_linux_amd64.tar.gz
 	silent_run tar -xzf k9s_linux_amd64.tar.gz
 	silent_run chmod a+x k9s
 	silent_run sudo mv k9s /usr/local/bin/
@@ -138,7 +138,7 @@ fi
 # Install Telepresence
 if ! command_exists telepresence; then
 	echo -e "\tInstalling Telepresence..."
-	silent_run curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o telepresence
+	silent_run curl -fsSL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o telepresence
 	silent_run chmod a+x telepresence
 	silent_run sudo mv telepresence /usr/local/bin/
 else
