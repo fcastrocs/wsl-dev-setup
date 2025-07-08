@@ -214,10 +214,14 @@ else
 	echo -e "\tZsh is already the default shell."
 fi
 
+ZDOTDIR_EXPORT='export ZDOTDIR="$HOME/.config/zsh"'
+grep -Fxq "$ZDOTDIR_EXPORT" ~/.bashrc || echo "$ZDOTDIR_EXPORT" >> ~/.bashrc
+
 # ------------------------------------------------------------------------------------------------
 # Clean up
 # ------------------------------------------------------------------------------------------------
 rm -rf ~/tmp
+rm ~/.motd_shown ~/.sudo_as_admin_successful
 
 # end of script
 echo
