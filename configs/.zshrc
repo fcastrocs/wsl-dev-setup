@@ -225,4 +225,4 @@ git-cleanup() {
 # ----------------------------------------
 # Load syntax highlighting LAST
 # ----------------------------------------
-source "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+source "$ZSH/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
