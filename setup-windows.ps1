@@ -580,8 +580,8 @@ function Set-WslZshEnvironment {
     try {
         $targetDir = ".config"
 
-        Send-ToWslHome "$localConfigPath/.zshrc" "$remoteZshrcUrl" ".zshrc"
-        Send-ToWslHome "$localConfigPath/starship.toml" "$remoteStarshipUrl" "$targetDir/starship.toml"
+        Send-ToWslHome "$localConfigPath/.zshrc" "$remoteZshrcUrl" "$targetDir/zsh/.zshrc"
+        Send-ToWslHome "$localConfigPath/starship.toml" "$remoteStarshipUrl" "$targetDir/starship/starship.toml"
     }
     catch {
         Write-Host "   Failed to install .zshrc: $($_.Exception.Message)" -ForegroundColor Red

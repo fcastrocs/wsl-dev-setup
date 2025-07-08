@@ -74,6 +74,7 @@ zstyle ':completion:*' rehash true
 # ----------------------------------------
 # Starship Prompt
 # ----------------------------------------
+export STARSHIP_CONFIG="$HOME/.config/starship/starship.toml"
 eval "$(starship init zsh)"
 
 # ----------------------------------------
