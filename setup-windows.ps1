@@ -529,7 +529,11 @@ function Set-FiraCodeFontInEditors {
 function Set-WindowsTerminalSettings {
     Write-Host "`n - Setting Windows Terminal settings..."
 
-    $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+    $settingsPath = Get-WindowsTerminalSettingsPath
+
+    if (-not $settingsPath) {
+        return
+    }
 
     try {
         $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
@@ -567,6 +571,30 @@ function Set-WindowsTerminalSettings {
     }
     catch {
         Write-Host "   Could not apply Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
+function Get-WindowsTerminalSettingsPath {
+    $possiblePaths = @(
+        "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+        "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json",
+        "$env:APPDATA\Microsoft\Windows Terminal\settings.json"
+    )
+
+    foreach ($path in $possiblePaths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
+
+    Write-Warning "`tWindows Terminal settings.json not found in known locations." -ForegroundColor Yellow
+    return $null
+}
+
+function Remove-WindowsTerminalSettings {
+    $settingsPath = Get-WindowsTerminalSettingsPath
+    if ($settingsPath) {
+        Remove-Item -Path $settingsPath -Force
     }
 }
 
@@ -613,8 +641,11 @@ Install-WingetPackage -PackageId "Anysphere.Cursor"
 Install-WingetPackage -PackageId "JetBrains.IntelliJIDEA.Ultimate"
 Install-Chocolatey
 
-# Configure Windows Terminal and editors with FiraCode font
+# Install FiraCode font
 Install-NerdFontFiraCode
+
+# Configure Windows Terminal and editors with FiraCode font
+Remove-WindowsTerminalSettings
 Start-And-Close-EditorsWhenReady
 Set-FiraCodeFontInEditors
 Set-WindowsTerminalSettings
