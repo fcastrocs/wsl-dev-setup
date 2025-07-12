@@ -1,56 +1,58 @@
-# ⚙️ WSL Dev Environment Setup
+# 🚀 WSL Development Environment Setup
 
-This project automates the setup of a complete and ready-to-use development environment on **Windows 11** using **WSL2** and **Ubuntu**. It includes two scripts:
+**One-command setup for a complete development environment on Windows 11 using WSL2 + Ubuntu.**
 
-- `setup-windows.ps1` – Configures Windows, installs WSL, Ubuntu, and prepares the terminal environment.
-- `setup-ubuntu.sh` – Runs inside Ubuntu to install development dependencies and configure the shell environment.
+## ⚡ Quick Start
 
-Ideal for developers who want a fast, clean, and consistent Linux-like workflow on Windows.
-
----
-
-## 🚀 Getting Started
-
-### Run the Windows Setup Script
-
-Make sure you run this in **PowerShell as Administrator**:
+Run this in **PowerShell as Administrator**:
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
 irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-windows.ps1 | iex
 ```
 
-- Installs **WSL2**
-- Installs **Ubuntu (latest LTS)**
-- Configures **Windows Terminal**:
-  - Sets default profile to Ubuntu
-  - Applies the *Fira Code* font and *One Half Dark* color scheme
-- Creates a `.wslconfig` file to optimize WSL2 performance
-- Installs developer-friendly **Fira Code** font
-- Installs popular **Windows IDEs**:
-  - Visual Studio Code
-  - IntelliJ IDEA Ultimate
-  - Cursor IDE
-  - Notepad++
-- Launches Ubuntu and runs `setup-ubuntu.sh` to:
-  - Install developer tools: Git, Zsh, Node.js, Docker, Java, AWS CLI, and more
-  - Configure shell with Starship, Oh My Zsh, plugins, etc.
+## 🖥️ Windows Installation
+- Windows Terminal
+- Visual Studio Code
+- Cursor IDE
+- IntelliJ IDEA Ultimate
+- Notepad++
+- FiraCode Nerd Font
+- WSL2 + Ubuntu (latest LTS)
 
----
+## 🐧 Ubuntu Installation
+- Zsh + Oh My Zsh + Starship prompt
+- Git + GitHub CLI
+- Docker + Docker Compose
+- Node.js (via NVM)
+- AWS CLI v2
+- kubectl + k9s
+- Telepresence
+- kubetail
 
-## 🧾 Requirements
+## ✨ What It Does
 
-- Windows 11
-- Administrator access
+- **WSL2 Setup**: Enables WSL, installs Ubuntu, creates optimized `.wslconfig`
+- **User Configuration**: Creates non-root user with passwordless sudo
+- **Terminal Setup**: Configures Windows Terminal with Ubuntu as default, FiraCode font, One Half Dark theme
+- **Editor Setup**: Applies FiraCode font to VS Code, Cursor, and Notepad++
+- **Shell Environment**: Beautiful Zsh setup with auto-suggestions, syntax highlighting, and smart completions
 
----
+## 🖥️ Access Your Environment
 
-## 📜 License
+After installation, simply open **Windows Terminal** - it will automatically launch Ubuntu with your configured Zsh shell and development tools ready to use.
 
-MIT License – use freely, modify openly, contribute back if you’d like!
+## 🗑️ Uninstall
 
----
+```powershell
+# Run as Administrator
+irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/uninstall.ps1 | iex
+```
 
-## 👤 Author
+## 📄 License
 
-Created by [Francisco Castro](https://github.com/fcastrocs)
+MIT License
+
+## 👨‍💻 Author
+
+**Francisco Castro** - [@fcastrocs](https://github.com/fcastrocs)

@@ -240,6 +240,7 @@ echo 'export ZDOTDIR="$HOME/.config/zsh"' > ~/.zshenv
 # ------------------------------------------------------------------------------------------------
 rm -rf ~/tmp
 rm ~/.motd_shown ~/.sudo_as_admin_successful ~/.zshrc
+rm -- "$0" # remove this script
 
 # end of script
 echo
