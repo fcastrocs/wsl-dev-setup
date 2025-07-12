@@ -126,10 +126,14 @@ install_packages "${REPO_PACKAGES[@]}"
 # ------------------------------------------------------------------------------------------------
 
 # Install AWS CLI v2
-echo -e "\tInstalling AWS CLI v2..."
-silent_run curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-silent_run unzip awscliv2.zip
-silent_run sudo ./aws/install
+if ! command_exists aws; then
+	echo -e "\tInstalling AWS CLI v2..."
+	silent_run curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+	silent_run unzip awscliv2.zip
+	silent_run sudo ./aws/install
+else
+	echo -e "\tAWS CLI v2 already installed."
+fi
 
 # Install k9s
 if ! command_exists k9s; then
@@ -158,6 +162,14 @@ if ! command_exists kubetail; then
 	silent_run bash -c 'curl -sS https://www.kubetail.com/install.sh | bash'
 else
 	echo -e "\tkubetail already installed."
+fi
+
+# Install NVM for Node.js
+if ! command_exists nvm; then
+	echo -e "\tInstalling NVM for Node.js..."
+	silent_run bash -c 'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash'
+else
+	echo -e "\tNVM already installed."
 fi
 
 # ------------------------------------------------------------------------------------------------

@@ -1,42 +1,47 @@
-# ~/.zshrc
-# Zsh Configuration File
+# ~/.zshrc — Zsh Configuration File
 
-# ----------------------------------------
-# Oh My Zsh Configuration
-# ----------------------------------------
+# ═══════════════════════════════════════════════════════════════
+# 🧠 Core Environment Setup
+# ═══════════════════════════════════════════════════════════════
+
 export ZSH="$HOME/.oh-my-zsh"
-plugins=(
-    git
-    z
-    command-not-found
-    colored-man-pages
-    docker
-    kubectl
-    gh
-    zsh-completions
-    zsh-autosuggestions
-)
+export STARSHIP_CONFIG="$HOME/.config/starship/starship.toml"
+export EDITOR="vim"
 
-# Load Oh My Zsh FIRST
-source "$ZSH/oh-my-zsh.sh"
+# NVM (Node Version Manager)
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-# ----------------------------------------
-# PATH Configuration
-# ----------------------------------------
+# PATH additions
 PATH_ADDITIONS=(
-    "/usr/local/bin"
-    "$HOME/.local/bin"
+  "/usr/local/bin"
+  "$HOME/.local/bin"
 )
-
 for path_item in "${PATH_ADDITIONS[@]}"; do
-    if [[ -n "$path_item" && -d "$path_item" && ":$PATH:" != *":$path_item:"* ]]; then
-        export PATH="$path_item:$PATH"
-    fi
+  [[ -d "$path_item" && ":$PATH:" != *":$path_item:"* ]] && export PATH="$path_item:$PATH"
 done
 
-# ----------------------------------------
-# History Configuration
-# ----------------------------------------
+# ═══════════════════════════════════════════════════════════════
+# ⚙️ Oh My Zsh + Plugins
+# ═══════════════════════════════════════════════════════════════
+
+plugins=(
+  git
+  z
+  command-not-found
+  colored-man-pages
+  docker
+  kubectl
+  gh
+  zsh-completions
+  zsh-autosuggestions
+)
+source "$ZSH/oh-my-zsh.sh"
+
+# ═══════════════════════════════════════════════════════════════
+# 🧾 History Configuration
+# ═══════════════════════════════════════════════════════════════
+
 HISTSIZE=10000
 SAVEHIST=10000
 HISTFILE="${ZDOTDIR:-$HOME}/.zsh_history"
@@ -52,15 +57,19 @@ setopt HIST_VERIFY               # Show command before running with history expa
 setopt APPEND_HISTORY            # Append to history file
 setopt INC_APPEND_HISTORY        # Add commands to history immediately
 
-# ----------------------------------------
-# Completion System
-# ----------------------------------------
+# ═══════════════════════════════════════════════════════════════
+# 🔁 Completion System
+# ═══════════════════════════════════════════════════════════════
+
 zcompdump="${ZSH_CACHE_DIR:-$HOME/.cache}/zcompdump"
 autoload -Uz compinit
 compinit -C -d "$zcompdump"
 
 # AWS CLI autocompletion
 complete -C '/usr/local/bin/aws_completer' aws
+
+# NVM completion
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 # Completion styling
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
@@ -73,57 +82,52 @@ zstyle ':completion:*:match:*' original only
 zstyle ':completion:*:approximate:*' max-errors 1 numeric
 zstyle ':completion:*' rehash true
 
-# ----------------------------------------
-# Starship Prompt
-# ----------------------------------------
-export STARSHIP_CONFIG="$HOME/.config/starship/starship.toml"
+# ═══════════════════════════════════════════════════════════════
+# 🌟 Prompt
+# ═══════════════════════════════════════════════════════════════
+
 eval "$(starship init zsh)"
 
-# ----------------------------------------
-# Aliases
-# ----------------------------------------
+# ═══════════════════════════════════════════════════════════════
+# 📎 Aliases
+# ═══════════════════════════════════════════════════════════════
 
 ## Kubernetes
-alias k="kubectl"                                            # Main kubectl command
-alias kgp="kubectl get pods"                                 # List all pods in the current namespace
-alias kgs="kubectl get services"                             # List all services
-alias kgd="kubectl get deployments"                          # List all deployments
-alias kgn="kubectl get namespaces"                           # List all namespaces
-alias kgi="kubectl get ingress"                              # List all ingresses
-alias kgpv="kubectl get pv"                                  # List persistent volumes
-alias kgpvc="kubectl get pvc"                                # List persistent volume claims
-
-alias kns="kubectl config set-context --current --namespace" # Set the current namespace
-alias kctx="kubectl config use-context"                      # Switch to another context
-alias kconf="kubectl config view"                            # Show kubeconfig details
-
-alias kdp="kubectl describe pod"                             # Show detailed pod info
-alias kds="kubectl describe service"                         # Show detailed service info
-alias kdd="kubectl describe deployment"                      # Show detailed deployment info
-
-alias klogs="kubectl logs"                                   # Show logs from a pod (or container with -c)
-alias kexec="kubectl exec -it"                               # Execute a command inside a container
-alias kport="kubectl port-forward"                           # Forward one or more local ports to a pod
-
-# Kubernetes tools
-alias kt="kubetail"                                           # Stream logs from multiple pods
-alias k9="k9s"                                               # Terminal-based Kubernetes dashboard
-alias tp="telepresence"                                      # Telepresence for local development
+alias k="kubectl"
+alias kgp="kubectl get pods"
+alias kgs="kubectl get services"
+alias kgd="kubectl get deployments"
+alias kgn="kubectl get namespaces"
+alias kgi="kubectl get ingress"
+alias kgpv="kubectl get pv"
+alias kgpvc="kubectl get pvc"
+alias kns="kubectl config set-context --current --namespace"
+alias kctx="kubectl config use-context"
+alias kconf="kubectl config view"
+alias kdp="kubectl describe pod"
+alias kds="kubectl describe service"
+alias kdd="kubectl describe deployment"
+alias klogs="kubectl logs"
+alias kexec="kubectl exec -it"
+alias kport="kubectl port-forward"
+alias kt="kubetail"
+alias k9="k9s"
+alias tp="telepresence"
 
 ## Docker
-alias d="docker"                   # Base docker command
-alias dps="docker ps"              # List running containers
-alias dpa="docker ps -a"           # List all containers (including stopped)
-alias di="docker images"           # List local images
-alias dlog="docker logs"           # View container logs
-alias dex="docker exec -it"        # Run interactive command in container
-alias dstop="docker stop"          # Stop container
-alias drm="docker rm"              # Remove container
-alias drmi="docker rmi"            # Remove image
-alias dclean="docker system prune -f"        # Clean up unused containers/images
-alias dcleanall="docker system prune -a -f"  # Clean up everything unused
+alias d="docker"
+alias dps="docker ps"
+alias dpa="docker ps -a"
+alias di="docker images"
+alias dlog="docker logs"
+alias dex="docker exec -it"
+alias dstop="docker stop"
+alias drm="docker rm"
+alias drmi="docker rmi"
+alias dclean="docker system prune -f"
+alias dcleanall="docker system prune -a -f"
 
-# Docker Compose
+## Docker Compose
 alias dc="docker-compose"
 alias dcu="docker-compose up"
 alias dcd="docker-compose down"
@@ -131,104 +135,99 @@ alias dcb="docker-compose build"
 alias dcl="docker-compose logs"
 
 ## Maven
-alias m="mvn"                      # Maven shorthand
-alias mci="mvn clean install"      # Clean and install
-alias mcp="mvn clean package"      # Clean and package
-alias mct="mvn clean test"         # Clean and test
-alias mcc="mvn clean compile"      # Clean and compile
-alias mvnver="mvn --version"       # Show Maven version
+alias m="mvn"
+alias mci="mvn clean install"
+alias mcp="mvn clean package"
+alias mct="mvn clean test"
+alias mcc="mvn clean compile"
+alias mvnver="mvn --version"
 
 ## Node.js/npm
-alias node-version="node --version && npm --version"  # Show Node and npm versions
-alias npm-list="npm list -g --depth=0"                # List global packages
-alias npm-update="npm update -g"                      # Update all global packages
+alias node-version="node --version && npm --version"
+alias npm-list="npm list -g --depth=0"
+alias npm-update="npm update -g"
 
 ## Git
-alias gst="git status"             # Show current changes and branch info
-alias gco="git checkout"           # Switch branches or restore files
-alias gaa="git add -A"             # Stage all changes (tracked and untracked)
-alias gcm="git commit -m"          # Commit with message
-alias gp="git push"                # Push to remote
-alias gl="git pull"                # Pull from remote
-alias glog="git log --oneline --graph --decorate"  # Pretty git log
-alias gclean="git clean -fd"       # Remove untracked files and directories
+alias gst="git status"
+alias gco="git checkout"
+alias gaa="git add -A"
+alias gcm="git commit -m"
+alias gp="git push"
+alias gl="git pull"
+alias glog="git log --oneline --graph --decorate"
+alias gclean="git clean -fd"
 
-## AWS CLI
-alias aws-whoami="aws sts get-caller-identity"  # Show current AWS identity
+## AWS
+alias aws-whoami="aws sts get-caller-identity"
 
 ## Navigation
-alias ..="cd .."           # Go up one directory
-alias ...="cd ../.."       # Go up two directories
-alias ....="cd ../../.."   # Go up three directories
-alias la="ls -la"          # List all files with details (including hidden)
-alias l="ls -l"            # Long listing format (no hidden files)
-alias lt="ls -lt"          # Long list sorted by newest modified first
-alias lh="ls -lh"          # Long list with human-readable file sizes
+alias ..="cd .."
+alias ...="cd ../.."
+alias ....="cd ../../.."
+alias la="ls -la"
+alias l="ls -l"
+alias lt="ls -lt"
+alias lh="ls -lh"
 
-## System utils
-alias grep="grep --color=auto"      # Search files or output with highlighting
-alias fgrep="fgrep --color=auto"    # Fixed-string grep with color
-alias egrep="egrep --color=auto"    # Extended grep with color
-alias ps="ps aux"                   # View active processes
-alias psg="ps aux | grep"           # Search for specific process
-alias df="df -h"                    # View disk space usage
-alias free="free -h"                # Show memory usage
+## System
+alias grep="grep --color=auto"
+alias fgrep="fgrep --color=auto"
+alias egrep="egrep --color=auto"
+alias ps="ps aux"
+alias psg="ps aux | grep"
+alias df="df -h"
+alias free="free -h"
 
 ## Quick edits
 alias zshrc="$EDITOR ~/.zshrc"
 alias vimrc="$EDITOR ~/.vimrc"
 alias reload="source ~/.zshrc"
 
-## Custom script aliases
+## Scripts
 alias ekslogin="$HOME/scripts/login-eks.sh"
 alias ecrlogin="$HOME/scripts/login-ecr.sh"
 
-# ----------------------------------------
-# Custom Functions
-# ----------------------------------------
+# ═══════════════════════════════════════════════════════════════
+# 🔧 Custom Functions
+# ═══════════════════════════════════════════════════════════════
 
-# Create directory and cd into it
-mkcd() {
-    mkdir -p "$1" && cd "$1"
-}
+mkcd() { mkdir -p "$1" && cd "$1"; }
 
-# Extract various archive formats
 extract() {
-    if [ -f "$1" ]; then
-        case "$1" in
-            *.tar.bz2)   tar xjf "$1"     ;;
-            *.tar.gz)    tar xzf "$1"     ;;
-            *.bz2)       bunzip2 "$1"     ;;
-            *.rar)       unrar x "$1"     ;;
-            *.gz)        gunzip "$1"      ;;
-            *.tar)       tar xf "$1"      ;;
-            *.tbz2)      tar xjf "$1"     ;;
-            *.tgz)       tar xzf "$1"     ;;
-            *.zip)       unzip "$1"       ;;
-            *.Z)         uncompress "$1"  ;;
-            *.7z)        7z x "$1"        ;;
-            *)           echo "'$1' cannot be extracted" ;;
-        esac
-    else
-        echo "'$1' is not a valid file"
-    fi
+	if [ -f "$1" ]; then
+		case "$1" in
+			*.tar.bz2)   tar xjf "$1"     ;;
+			*.tar.gz)    tar xzf "$1"     ;;
+			*.bz2)       bunzip2 "$1"     ;;
+			*.rar)       unrar x "$1"     ;;
+			*.gz)        gunzip "$1"      ;;
+			*.tar)       tar xf "$1"      ;;
+			*.tbz2)      tar xjf "$1"     ;;
+			*.tgz)       tar xzf "$1"     ;;
+			*.zip)       unzip "$1"       ;;
+			*.Z)         uncompress "$1"  ;;
+			*.7z)        7z x "$1"        ;;
+			*)           echo "'$1' cannot be extracted" ;;
+		esac
+	else
+		echo "'$1' is not a valid file"
+	fi
 }
 
-# Kill process by name
 killp() {
-    if [[ -z "$1" ]]; then
-        echo "Usage: killp <process_name>"
-        return 1
-    fi
-    pkill -f "$1"
+	if [[ -z "$1" ]]; then
+		echo "Usage: killp <process_name>"
+		return 1
+	fi
+	pkill -f "$1"
 }
 
-# Git branch cleanup - remove merged branches
 git-cleanup() {
-    git branch --merged | grep -v "\*\|main\|master\|develop" | xargs -n 1 git branch -d
+	git branch --merged | grep -v "\*\|main\|master\|develop" | xargs -n 1 git branch -d
 }
 
-# ----------------------------------------
-# Load syntax highlighting LAST
-# ----------------------------------------
+# ═══════════════════════════════════════════════════════════════
+# 🎨 Load syntax highlighting LAST
+# ═══════════════════════════════════════════════════════════════
+
 source "$ZSH/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
