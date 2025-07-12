@@ -67,6 +67,7 @@ PREREQ_PACKAGES=(
 	ca-certificates
 	wget
 	gnupg
+	unzip
 	# dev packages
 	command-not-found
 	zsh
@@ -123,6 +124,12 @@ install_packages "${REPO_PACKAGES[@]}"
 # ------------------------------------------------------------------------------------------------
 # Install packages from source
 # ------------------------------------------------------------------------------------------------
+
+# Install AWS CLI v2
+echo -e "\tInstalling AWS CLI v2..."
+silent_run curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+silent_run unzip awscliv2.zip
+silent_run sudo ./aws/install
 
 # Install k9s
 if ! command_exists k9s; then

@@ -5,7 +5,7 @@ set -euo pipefail
 # ----------------------------------------
 # Defaults
 # ----------------------------------------
-AWS_REGION="us-east-1"
+AWS_REGION=""
 AWS_PROFILE=""
 EKS_CLUSTER_NAME=""
 NAMESPACE=""
@@ -15,7 +15,7 @@ NAMESPACE=""
 # ----------------------------------------
 usage() {
   cat <<EOF
-Usage: $0 [-p aws_profile] [-c cluster_name] [-r aws_region] [-n namespace]
+Usage: ekslogin [-p aws_profile] [-c cluster_name] [-r aws_region] [-n namespace]
 
 Options:
   -p AWS_PROFILE      (required) AWS CLI profile name
@@ -40,21 +40,13 @@ while getopts ":p:c:r:n:" opt; do
 done
 
 # ----------------------------------------
-# Interactive prompts if missing
+# Interactive prompts only if missing
 # ----------------------------------------
-if [[ -z "$AWS_PROFILE" ]]; then
-  read -rp "Enter AWS profile: " AWS_PROFILE
-fi
-
-if [[ -z "$EKS_CLUSTER_NAME" ]]; then
-  read -rp "Enter EKS cluster name: " EKS_CLUSTER_NAME
-fi
-
-read -rp "Enter AWS region [default: $AWS_REGION]: " input_region
-AWS_REGION="${input_region:-$AWS_REGION}"
-
-read -rp "Enter namespace (optional): " input_namespace
-NAMESPACE="${input_namespace:-$NAMESPACE}"
+[[ -z "$AWS_PROFILE" ]] && read -rp "Enter AWS profile: " AWS_PROFILE
+[[ -z "$EKS_CLUSTER_NAME" ]] && read -rp "Enter EKS cluster name: " EKS_CLUSTER_NAME
+[[ -z "$AWS_REGION" ]] && read -rp "Enter AWS region [default: us-east-1]: " AWS_REGION
+AWS_REGION="${AWS_REGION:-us-east-1}"
+[[ -z "$NAMESPACE" ]] && read -rp "Enter namespace (optional): " NAMESPACE
 
 # ----------------------------------------
 # AWS login check

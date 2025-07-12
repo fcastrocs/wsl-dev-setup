@@ -12,7 +12,6 @@ plugins=(
     colored-man-pages
     docker
     kubectl
-    # aws
     gh
     zsh-completions
     zsh-autosuggestions
@@ -59,6 +58,9 @@ setopt INC_APPEND_HISTORY        # Add commands to history immediately
 zcompdump="${ZSH_CACHE_DIR:-$HOME/.cache}/zcompdump"
 autoload -Uz compinit
 compinit -C -d "$zcompdump"
+
+# AWS CLI autocompletion
+complete -C '/usr/local/bin/aws_completer' aws
 
 # Completion styling
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
