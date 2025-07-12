@@ -7,7 +7,7 @@ if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit 1
 }
 
-Write-Host "Uninstalling Ubuntu..."
+Write-Output "Uninstalling Ubuntu..."
 
 wsl --shutdown *> $null
 wsl --unregister Ubuntu *> $null
@@ -26,7 +26,7 @@ dism.exe /online /disable-feature /featurename:VirtualMachinePlatform /norestart
 if ($LASTEXITCODE -eq 3010) {
     $restartRequired = $true
 } elseif ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to disable WSL (exit code $LASTEXITCODE)" -ForegroundColor Red
+    Write-Error "Failed to disable WSL (exit code $LASTEXITCODE)"
     exit 1
 }
 
@@ -54,5 +54,4 @@ if (Test-Path $terminalSettingsPath) {
 }
 
 if ($restartRequired) {
-    Write-Host "Restart required to completely disable WSL" -ForegroundColor Yellow
-}
+    Write-Warning "Restart required to completely disable WSL"
