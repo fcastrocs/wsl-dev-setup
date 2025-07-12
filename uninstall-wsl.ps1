@@ -55,3 +55,4 @@ if (Test-Path $terminalSettingsPath) {
 
 if ($restartRequired) {
     Write-Warning "Restart required to completely disable WSL"
+}
