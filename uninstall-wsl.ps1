@@ -3,11 +3,11 @@ $terminalSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8w
 
 # Check if running as Administrator
 if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Error "This script must be run as Administrator!"
+    Write-Host "This script must be run as Administrator!" -ForegroundColor Red
     exit 1
 }
 
-Write-Output "Uninstalling Ubuntu..."
+Write-Host "Uninstalling Ubuntu..."
 
 wsl --shutdown *> $null
 wsl --unregister Ubuntu *> $null
@@ -26,8 +26,7 @@ dism.exe /online /disable-feature /featurename:VirtualMachinePlatform /norestart
 if ($LASTEXITCODE -eq 3010) {
     $restartRequired = $true
 } elseif ($LASTEXITCODE -ne 0) {
-    Write-Error "Failed to disable WSL (exit code $LASTEXITCODE)"
-    exit 1
+    Write-Host "Failed to disable WSL (exit code $LASTEXITCODE)" -ForegroundColor Red
 }
 
 # Remove Ubuntu profiles from Windows Terminal
@@ -49,10 +48,10 @@ if (Test-Path $terminalSettingsPath) {
         $settings | ConvertTo-Json -Depth 10 | Set-Content $terminalSettingsPath -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Error "Failed to modify Windows Terminal settings: $($_.Exception.Message)"
+        Write-Host "Failed to modify Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
 if ($restartRequired) {
-    Write-Warning "Restart required to completely disable WSL"
+    Write-Host "Restart required to completely disable WSL" -ForegroundColor Yellow
 }
