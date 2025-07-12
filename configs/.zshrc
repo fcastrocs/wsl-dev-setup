@@ -177,6 +177,9 @@ alias zshrc="$EDITOR ~/.zshrc"
 alias vimrc="$EDITOR ~/.vimrc"
 alias reload="source ~/.zshrc"
 
+## Custom script aliases
+alias ekslogin="$HOME/scripts/login-eks.sh"
+
 # ----------------------------------------
 # Custom Functions
 # ----------------------------------------

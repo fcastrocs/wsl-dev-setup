@@ -50,6 +50,11 @@ function Send-ToWslHome {
                 throw "Failed to copy local file to WSL: $localPath. Error: $result"
             }
 
+            # Set execution permission if file is .sh
+            if ($targetPath -like '*.sh') {
+                Invoke-Wsl "chmod +x '$targetPath'"
+            }
+
             Write-Host "`tLocal file copied to WSL: $targetPath" -ForegroundColor DarkGray
 
         }
@@ -58,6 +63,11 @@ function Send-ToWslHome {
             $result = Invoke-Wsl "curl -fsSL '$remoteUrl' -o '$targetPath'" 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to download $(Split-Path $targetPath -Leaf) from $remoteUrl. Error: $result"
+            }
+
+            # Set execution permission if file is .sh
+            if ($targetPath -like '*.sh') {
+                Invoke-Wsl "chmod +x '$targetPath'"
             }
 
             Write-Host "`tRemote file downloaded to WSL: $targetPath" -ForegroundColor DarkGray
@@ -306,7 +316,7 @@ function Invoke-WSLSetupScript {
         Send-ToWslHome $localScriptPath $remoteScriptUrl "setup/wsl-init.sh"
 
         # Execute setup script
-        Invoke-Wsl "chmod +x /home/$LINUX_USER/setup/wsl-init.sh && /home/$LINUX_USER/setup/wsl-init.sh"
+        Invoke-Wsl "/home/$LINUX_USER/setup/wsl-init.sh"
 
         # Cleanup
         Invoke-Wsl "rm -rf /home/$LINUX_USER/setup"
@@ -617,6 +627,21 @@ function Set-WslZshEnvironment {
     }
 }
 
+function Send-CustomScripts {
+    $localScriptsPath = "$PSScriptRoot/scripts"
+    $remoteScriptsUrl = $GITHUB_URI + "/scripts"
+
+    Write-Host "`n - Sending custom scripts to WSL..."
+
+    try {
+        Send-ToWslHome "$localScriptsPath/login-eks.sh" "$remoteScriptsUrl/login-eks.sh" "scripts/login-eks.sh"
+    }
+    catch {
+        Write-Host "`tFailed to send custom scripts: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+
 Write-Host "`n========================================================" -ForegroundColor DarkYellow
 Write-Host "         WSL Full Developer Setup Starting" -ForegroundColor DarkYellow
 Write-Host "========================================================" -ForegroundColor DarkYellow
@@ -631,6 +656,7 @@ Add-LinuxUserWithSudo
 Set-DefaultWSLUser
 Write-WSLConfig
 Set-WslZshEnvironment
+Send-CustomScripts
 Invoke-WSLSetupScript
 
 # Install tools via Chocolatey or Winget
