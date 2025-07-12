@@ -635,6 +635,7 @@ function Send-CustomScripts {
 
     try {
         Send-ToWslHome "$localScriptsPath/login-eks.sh" "$remoteScriptsUrl/login-eks.sh" "scripts/login-eks.sh"
+        Send-ToWslHome "$localScriptsPath/login-ecr.sh" "$remoteScriptsUrl/login-ecr.sh" "scripts/login-ecr.sh"
     }
     catch {
         Write-Host "`tFailed to send custom scripts: $($_.Exception.Message)" -ForegroundColor Red

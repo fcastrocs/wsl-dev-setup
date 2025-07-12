@@ -181,6 +181,7 @@ alias reload="source ~/.zshrc"
 
 ## Custom script aliases
 alias ekslogin="$HOME/scripts/login-eks.sh"
+alias ecrlogin="$HOME/scripts/login-ecr.sh"
 
 # ----------------------------------------
 # Custom Functions
