@@ -150,21 +150,30 @@ function Install-WingetPackage {
 function Enable-WSLFeatures {
     Write-Host "`n - Enabling WSL and Virtual Machine Platform..."
 
-    try {
-        dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart *> $null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to enable Microsoft-Windows-Subsystem-Linux (exit code $LASTEXITCODE)"
-        }
+    $restartRequired = $false
 
-        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart *> $null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to enable VirtualMachinePlatform (exit code $LASTEXITCODE)"
-        }
-    }
-    catch {
-        Write-Host "Failed to enable WSL or VM Platform: $($_.Exception.Message)" -ForegroundColor Red
+    dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart *> $null
+    if ($LASTEXITCODE -eq 3010) {
+        $restartRequired = $true
+    } elseif ($LASTEXITCODE -ne 0) {
+        Write-Host "Failed to enable Microsoft-Windows-Subsystem-Linux (exit code $LASTEXITCODE)" -ForegroundColor Red
         exit 1
     }
+
+    dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart *> $null
+    if ($LASTEXITCODE -eq 3010) {
+        $restartRequired = $true
+    } elseif ($LASTEXITCODE -ne 0) {
+        Write-Host "Failed to enable VirtualMachinePlatform (exit code $LASTEXITCODE)" -ForegroundColor Red
+        exit 1
+    }
+
+    if ($restartRequired) {
+        Write-Host "Restart required to complete WSL setup." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "WSL and Virtual Machine Platform enabled successfully." -ForegroundColor Green
 }
 
 function Install-WSLKernel {
