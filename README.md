@@ -4,11 +4,10 @@
 
 ## ⚡ Quick Start
 
-Run this in **PowerShell as Administrator**:
-
 ```powershell
+# Run as Administrator
 Set-ExecutionPolicy Bypass -Scope Process -Force
-irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/setup-windows.ps1 | iex
+irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/install.ps1 | iex
 ```
 
 ## 🖥️ Windows Installation
@@ -46,6 +45,7 @@ After installation, simply open **Windows Terminal** - it will automatically lau
 
 ```powershell
 # Run as Administrator
+Set-ExecutionPolicy Bypass -Scope Process -Force
 irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/uninstall.ps1 | iex
 ```
 
