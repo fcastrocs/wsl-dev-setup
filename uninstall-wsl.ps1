@@ -7,6 +7,8 @@ if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit 1
 }
 
+Write-Host "Uninstalling Ubuntu..."
+
 wsl --shutdown *> $null
 wsl --unregister Ubuntu *> $null
 
