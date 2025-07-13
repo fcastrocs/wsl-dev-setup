@@ -34,15 +34,17 @@ if (Test-Path $terminalSettingsPath) {
     try {
         $settings = Get-Content $terminalSettingsPath -Raw | ConvertFrom-Json
 
-        # Remove Ubuntu/WSL profiles
+        # Remove any profile that is named "Ubuntu" and comes from Microsoft.WSL
         if ($settings.profiles -and $settings.profiles.list) {
             $settings.profiles.list = $settings.profiles.list | Where-Object {
-                $_.name -ne "Ubuntu" -and $_.source -ne "Microsoft.WSL"
+                -not ($_.name -eq "Ubuntu" -and $_.source -eq "Microsoft.WSL")
             }
         }
 
-        # Remove the defaultProfile property
-        $settings.PSObject.Properties.Remove("defaultProfile")
+        # Remove the defaultProfile property if it exists
+        if ($settings.PSObject.Properties.Name -contains "defaultProfile") {
+            $settings.PSObject.Properties.Remove("defaultProfile")
+        }
 
         # Write the modified settings back to the file
         $settings | ConvertTo-Json -Depth 10 | Set-Content $terminalSettingsPath -ErrorAction SilentlyContinue
