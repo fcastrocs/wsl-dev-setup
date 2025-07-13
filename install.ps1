@@ -364,64 +364,70 @@ function Install-Chocolatey {
 }
 
 function Install-NerdFontFiraCode {
-    [CmdletBinding()]
-    param ()
-
-    $ErrorActionPreference = 'Stop'
-
     try {
         $fontZipName = "FiraCode.zip"
         $tempZipPath = "$env:TEMP\$fontZipName"
         $extractPath = "$env:TEMP\FiraCodeFont"
-        $fontsFolder = "$env:WINDIR\Fonts"
+        $userFonts = "$env:LOCALAPPDATA\Microsoft\Windows\Fonts"
+        $registryPath = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts"
 
-        # Remove existing fonts matching Fira*.ttf
-        Get-ChildItem -Path $fontsFolder -Include "Fira*.ttf" -Recurse -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            try {
-                Remove-Item -Path $_.FullName -Force -ErrorAction Stop *>$null 2>&1
-            }
-            catch {}
+        # Cleanup previous download and extract paths
+        if (Test-Path $tempZipPath) { Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue }
+
+        # Ensure fonts folder exists
+        if (-not (Test-Path $userFonts)) {
+            New-Item -ItemType Directory -Path $userFonts -Force | Out-Null
         }
 
-        # Get latest GitHub release
+        # Fetch latest Nerd Fonts release
         $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest" `
             -Headers @{ "User-Agent" = "PowerShell" }
 
-        $asset = $release.assets | Where-Object { $_.name -eq $fontZipName }
+        $asset = $release.assets | Where-Object { $_.name -like "*$fontZipName" }
+        if (-not $asset) {
+	    Write-Host "`tFiraCode.zip not found in latest Nerd Fonts release." -ForegroundColor Red
+            return
+        }
 
-        if (-not $asset) { return }
+        # Download and extract
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempZipPath -ErrorAction Stop
+        Expand-Archive -Path $tempZipPath -DestinationPath $extractPath -Force -ErrorAction Stop
 
-        # Download FiraCode.zip
-        if (Test-Path $tempZipPath) { Remove-Item $tempZipPath -Force *>$null 2>&1 }
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempZipPath *>$null 2>&1
+        # Install each font
+        Get-ChildItem -Path $extractPath -Recurse -Include *.ttf -ErrorAction Stop | ForEach-Object {
+            $sourcePath = $_.FullName
+            $fontFileName = $_.Name
+            $targetPath = Join-Path $userFonts $fontFileName
 
-        # Extract archive
-        if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force *>$null 2>&1 }
-        Expand-Archive -Path $tempZipPath -DestinationPath $extractPath -Force *>$null 2>&1
+            # Overwrite existing file silently
+            Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
 
-        # Install fonts
-        Get-ChildItem -Path $extractPath -Recurse -Include *.ttf -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            $destPath = Join-Path $fontsFolder $_.Name
-            if (-not (Test-Path $destPath)) {
-                Copy-Item -Path $_.FullName -Destination $destPath -Force *>$null 2>&1
-            }
+            # Registry name format: "FiraCode Nerd Font Regular (TrueType)"
+            $fontDisplayName = "$($_.BaseName) (TrueType)"
+
+            # Register in per-user fonts
+            New-ItemProperty -Path $registryPath `
+                -Name $fontDisplayName `
+                -Value $fontFileName `
+                -PropertyType String `
+                -Force | Out-Null
         }
     }
     catch {
-        Write-Host "FiraCode Nerd Font installation failed: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "`tFiraCode Nerd Font installation failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
-function Start-And-Close-EditorsWhenReady {
-    Write-Host "`n - Getting things ready to set FiraCode Nerd Font in editors..."
+# Open Windows terminal and Editors to generate setting files
+function Open-AppsForFirstTime {
+    Write-Host "`n - Getting things ready..."
 
     # Refresh environment variables to pick up newly installed executables
     $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-    $editors = @(
+    $apps = @(
         @{ name = "VS Code"; exe = "code"; args = $null; process = "Code" },
         @{ name = "Cursor IDE"; exe = "cursor"; args = $null; process = "Cursor" },
         @{ name = "Notepad++"; exe = "notepad++.exe"; args = "$env:APPDATA\Notepad++\stylers.xml"; process = "notepad++" }
@@ -430,21 +436,21 @@ function Start-And-Close-EditorsWhenReady {
 
     $jobs = @()
 
-    foreach ($editor in $editors) {
+    foreach ($app in $apps) {
         $job = Start-Job -ScriptBlock {
-            param ($editor)
+            param ($app)
 
             try {
-                $alreadyRunning = Get-Process -Name $editor.process -ErrorAction SilentlyContinue
+                $alreadyRunning = Get-Process -Name $app.process -ErrorAction SilentlyContinue
                 if ($alreadyRunning) {
                     return
                 }
 
-                if ($editor.args) {
-                    Start-Process -FilePath $editor.exe -ArgumentList $editor.args -WindowStyle Minimized
+                if ($app.args) {
+                    Start-Process -FilePath $app.exe -ArgumentList $app.args -WindowStyle Minimized
                 }
                 else {
-                    Start-Process -FilePath $editor.exe -WindowStyle Minimized
+                    Start-Process -FilePath $app.exe -WindowStyle Minimized
                 }
 
                 $timeoutMs = 10000
@@ -453,7 +459,7 @@ function Start-And-Close-EditorsWhenReady {
                 $readyProc = $null
 
                 while ($elapsed -lt $timeoutMs) {
-                    $readyProc = Get-Process -Name $editor.process -ErrorAction SilentlyContinue |
+                    $readyProc = Get-Process -Name $app.process -ErrorAction SilentlyContinue |
                     Where-Object { $_.MainWindowHandle -ne 0 }
 
                     if ($readyProc) { break }
@@ -466,13 +472,13 @@ function Start-And-Close-EditorsWhenReady {
                     $readyProc | Stop-Process -Force
                 }
                 else {
-                    Write-Host "   $($editor.name) never showed a window. Skipping." -ForegroundColor Yellow
+                    Write-Host "`t$($app.name) never showed a window. Skipping." -ForegroundColor Yellow
                 }
             }
             catch {
-                Write-Host "   Failed to launch or close $($editor.name): $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "`tFailed to launch or close $($app.name): $($_.Exception.Message)" -ForegroundColor Red
             }
-        } -ArgumentList $editor
+        } -ArgumentList $app
 
         $jobs += $job
     }
@@ -591,7 +597,7 @@ function Set-WindowsTerminalSettings {
         $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $settingsPath
     }
     catch {
-        Write-Host "   Could not apply Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "`tCould not apply Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
@@ -608,7 +614,6 @@ function Get-WindowsTerminalSettingsPath {
         }
     }
 
-    Write-Host "`tWindows Terminal settings.json not found in known locations." -ForegroundColor Yellow
     return $null
 }
 
@@ -684,7 +689,7 @@ Install-NerdFontFiraCode
 
 # Configure Windows Terminal and editors with FiraCode font
 Remove-WindowsTerminalSettings
-Start-And-Close-EditorsWhenReady
+Open-AppsForFirstTime
 Set-FiraCodeFontInEditors
 Set-WindowsTerminalSettings
 
