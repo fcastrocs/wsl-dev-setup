@@ -417,6 +417,10 @@ function Install-NerdFontFiraCode {
 function Start-And-Close-EditorsWhenReady {
     Write-Host "`n - Getting things ready to set FiraCode Nerd Font in editors..."
 
+    # Refresh environment variables to pick up newly installed executables
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path", "User")
+
     $editors = @(
         @{ name = "VS Code"; exe = "code"; args = $null; process = "Code" },
         @{ name = "Cursor IDE"; exe = "cursor"; args = $null; process = "Cursor" },
