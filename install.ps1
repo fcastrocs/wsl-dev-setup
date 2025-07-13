@@ -608,7 +608,7 @@ function Get-WindowsTerminalSettingsPath {
         }
     }
 
-    Write-Warning "`tWindows Terminal settings.json not found in known locations." -ForegroundColor Yellow
+    Write-Host "`tWindows Terminal settings.json not found in known locations." -ForegroundColor Yellow
     return $null
 }
 
