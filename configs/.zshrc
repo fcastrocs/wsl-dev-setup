@@ -184,8 +184,8 @@ alias vimrc="$EDITOR ~/.vimrc"
 alias reload="source ~/.zshrc"
 
 ## Scripts
-alias ekslogin="$HOME/scripts/login-eks.sh"
-alias ecrlogin="$HOME/scripts/login-ecr.sh"
+alias ekslogin="$HOME/.scripts/login-eks.sh"
+alias ecrlogin="$HOME/.scripts/login-ecr.sh"
 
 # ═══════════════════════════════════════════════════════════════
 # 🔧 Custom Functions
