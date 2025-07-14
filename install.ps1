@@ -7,7 +7,9 @@ $GITHUB_URI = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main"
 function Invoke-Wsl {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$Command
+        [string]$Command,
+
+        [switch]$Passthru  # Optional: show output live and suppress throw
     )
 
     $bashCommand = "`"$Command`""
@@ -18,7 +20,19 @@ function Invoke-Wsl {
         '--', 'bash', '-c', $bashCommand
     )
 
-    return wsl @wslArgs
+    if ($Passthru) {
+        # Stream output directly
+        & wsl @wslArgs
+        return
+    }
+
+    # Default behavior: capture output and throw on error
+    $output = & wsl @wslArgs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Invoke-Wsl failed (exit code $LASTEXITCODE): $output"
+    }
+
+    return $output
 }
 
 # Send a file to WSL home directory
@@ -35,20 +49,15 @@ function Send-ToWslHome {
     # Convert to WSL user home path
     $targetPath = "/home/$LINUX_USER/$($targetPath -replace '\\', '/' -replace '^/+', '')"
     $targetDir = (Split-Path $targetPath -Parent) -replace '\\', '/'
+
     try {
-        $result = Invoke-Wsl "mkdir -p '$targetDir'" 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create target directory: '$targetDir'. Error: $result"
-        }
+        Invoke-Wsl "mkdir -p '$targetDir'"
         
         if (Test-Path $localPath) {
             # Copy local file into WSL using base64 to preserve Unicode characters
             $bytes = [System.IO.File]::ReadAllBytes($localPath)
             $base64 = [Convert]::ToBase64String($bytes)
-            $result = Invoke-Wsl "echo '$base64' | base64 -d > '$targetPath'" 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to copy local file to WSL: $localPath. Error: $result"
-            }
+            Invoke-Wsl "echo '$base64' | base64 -d > '$targetPath'"
 
             # Set execution permission if file is .sh
             if ($targetPath -like '*.sh') {
@@ -56,14 +65,10 @@ function Send-ToWslHome {
             }
 
             Write-Host "`tLocal file copied to WSL: $targetPath" -ForegroundColor DarkGray
-
         }
         else {
             # Download remote file into WSL
-            $result = Invoke-Wsl "curl -fsSL '$remoteUrl' -o '$targetPath'" 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to download $(Split-Path $targetPath -Leaf) from $remoteUrl. Error: $result"
-            }
+            Invoke-Wsl "curl -fsSL '$remoteUrl' -o '$targetPath'"
 
             # Set execution permission if file is .sh
             if ($targetPath -like '*.sh') {
@@ -80,9 +85,7 @@ function Send-ToWslHome {
 
 function Test-RunningAsAdministrator {
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Host "ERROR: This script must be run as Administrator!" -ForegroundColor Red
-        Write-Host "Please right-click PowerShell and select 'Run as Administrator'"
-        exit 1
+        throw "ERROR: This script must be run as Administrator!"
     }
 }
 
@@ -113,8 +116,7 @@ function Install-ChocoPackage {
         }
     }
     catch {
-        Write-Host "  Chocolatey command failed: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+        throw "Install-ChocoPackage failed: $($_.Exception.Message)"
     }
 }
 
@@ -142,8 +144,7 @@ function Install-WingetPackage {
         }
     }
     catch {
-        Write-Host "  Winget command failed: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+        throw "Install-WingetPackage failed: $($_.Exception.Message)"
     }
 }
 
@@ -163,8 +164,7 @@ function Enable-WSLFeatures {
     if ($LASTEXITCODE -eq 3010) {
         $restartRequired = $true
     } elseif ($LASTEXITCODE -ne 0) {
-        Write-Host "Failed to enable Microsoft-Windows-Subsystem-Linux (exit code $LASTEXITCODE)" -ForegroundColor Red
-        exit 1
+        throw "Failed to enable Microsoft-Windows-Subsystem-Linux (exit code $LASTEXITCODE)"
     }
 
     # Enable VirtualMachinePlatform
@@ -172,127 +172,114 @@ function Enable-WSLFeatures {
     if ($LASTEXITCODE -eq 3010) {
         $restartRequired = $true
     } elseif ($LASTEXITCODE -ne 0) {
-        Write-Host "Failed to enable VirtualMachinePlatform (exit code $LASTEXITCODE)" -ForegroundColor Red
-        exit 1
+        throw "Failed to enable VirtualMachinePlatform (exit code $LASTEXITCODE)"
     }
 
     if ($restartRequired) {
-        Write-Host "Restart required to complete WSL setup." -ForegroundColor Red
-        exit 1
+        throw "Restart required to complete WSL setup."
     }
 }
-
 
 function Install-WSLKernel {
     Write-Host "`n - Updating WSL kernel..."
 
-    try {
-        wsl --update *> $null
-        if ($LASTEXITCODE -ne 0) {
-            throw "WSL kernel update failed (exit code $LASTEXITCODE)"
-        }
-    }
-    catch {
-        Write-Host "Failed to update WSL kernel: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+    $output = & wsl --update 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Install-WSLKernel failed (exit code $LASTEXITCODE): $output"
     }
 }
 
 function Install-Distro {
     Write-Host "`n - Installing $DISTRO..."
 
-    try {
-        $distroInstalled = wsl -l -q 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $DISTRO }
+    # Check if distro is already installed
+    $distroInstalled = wsl -l -q 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $DISTRO }
 
-        if (-not $distroInstalled) {
-            wsl --install -d $DISTRO --no-launch *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "$DISTRO installation failed (exit code $LASTEXITCODE)"
-            }
-        }
-
-        # Check if distro is initialized
-        wsl -d $DISTRO -- echo "$DISTRO initialized" *> $null
+    if (-not $distroInstalled) {
+        $output = & wsl --install -d $DISTRO --no-launch 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw "$DISTRO failed to initialize (exit code $LASTEXITCODE)"
+            throw "$DISTRO installation failed (exit code $LASTEXITCODE): $output"
         }
     }
-    catch {
-        Write-Host "Error: Failed to check, install, or initialize $DISTRO - $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+
+    # Validate distro initializes
+    $output = & wsl -d $DISTRO -- echo "$DISTRO initialized" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "$DISTRO failed to initialize (exit code $LASTEXITCODE): $output"
     }
 }
 
 function Add-LinuxUserWithSudo {
     Write-Host "`n - Creating user '$LINUX_USER' with passwordless sudo..."
 
-    try {
-        # Check if the user already exists inside distro
-        $userExists = wsl -d $DISTRO -- bash -c "id -u $LINUX_USER >/dev/null 2>&1 && echo yes || echo no" |
+    # Check if user exists
+    $userExists = & wsl -d $DISTRO -- bash -c "id -u $LINUX_USER >/dev/null 2>&1 && echo yes || echo no" 2>&1 |
         ForEach-Object { $_.Trim() }
 
-        if ($userExists -eq "yes") {
-            $command = "sudo usermod -aG sudo $LINUX_USER; echo '$LINUX_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$LINUX_USER > /dev/null; sudo chmod 0440 /etc/sudoers.d/$LINUX_USER"
-        }
-        else {
-            $command = "sudo adduser --disabled-password --gecos '' $LINUX_USER; echo '$LINUX_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$LINUX_USER > /dev/null; sudo usermod -aG sudo $LINUX_USER; sudo chmod 0440 /etc/sudoers.d/$LINUX_USER"
-        }
-
-        # Pass it into WSL with proper quoting
-        wsl -d $DISTRO -- bash -c "`"$command`"" *> $null
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create or configure user '$LINUX_USER'"
-        }
-
-        # Confirm NOPASSWD works
-        wsl -d $DISTRO -- sudo -n true 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Passwordless sudo is NOT configured properly for '$LINUX_USER'." -ForegroundColor Red
-            Write-Host "Please verify /etc/sudoers.d/$LINUX_USER exists and is correct." -ForegroundColor Red
-            exit 1
-        }
+    $cmd = if ($userExists -eq "yes") {
+        @(
+            "sudo usermod -aG sudo $LINUX_USER",
+            "echo '$LINUX_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$LINUX_USER > /dev/null",
+            "sudo chmod 0440 /etc/sudoers.d/$LINUX_USER"
+        ) -join "; "
+    } else {
+        @(
+            "sudo adduser --disabled-password --gecos '' $LINUX_USER",
+            "echo '$LINUX_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$LINUX_USER > /dev/null",
+            "sudo usermod -aG sudo $LINUX_USER",
+            "sudo chmod 0440 /etc/sudoers.d/$LINUX_USER"
+        ) -join "; "
     }
-    catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+
+    $output = & wsl -d $DISTRO -- bash -c "`"$cmd`"" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create/configure user '$LINUX_USER' (exit code $LASTEXITCODE): $output"
+    }
+
+    # Validate passwordless sudo
+    $output = & wsl -d $DISTRO -- sudo -n true 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Passwordless sudo failed for '$LINUX_USER': $output"
     }
 }
 
 function Set-DefaultWSLUser {
     Write-Host "`n - Setting '$LINUX_USER' as default WSL user..."
 
+    $lxssPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
+
     try {
-        $lxssPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
         $guid = (Get-ItemProperty "$lxssPath\*" |
-            Where-Object { $_.DistributionName -eq $DISTRO }).PSChildName
+                 Where-Object { $_.DistributionName -eq $DISTRO }).PSChildName
 
         if (-not $guid) {
-            throw "$DISTRO not found in registry."
+            throw "$DISTRO not found in registry under $lxssPath"
         }
 
-        $uid = wsl -d $DISTRO -- bash -c "id -u $LINUX_USER" 2>$null
-        $uid = $uid.Trim()
+        $uid = & wsl -d $DISTRO -- bash -c "id -u $LINUX_USER" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to get UID for '$LINUX_USER' (exit $LASTEXITCODE): $uid"
+        }
 
+        $uid = $uid.Trim()
         if (-not ($uid -match '^\d+$')) {
-            throw "User '$LINUX_USER' returned invalid UID: '$uid'"
+            throw "UID '$uid' for user '$LINUX_USER' is invalid"
         }
 
         Set-ItemProperty -Path "$lxssPath\$guid" -Name DefaultUid -Value ([int]$uid) -ErrorAction Stop
     }
     catch {
-        Write-Host "Failed to set default WSL user: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+        throw "Set-DefaultWSLUser failed: $($_.Exception.Message)"
     }
 }
 
 function Write-WSLConfig {
     Write-Host "`n - Writing .wslconfig with performance optimizations..."
 
-    try {
-        $configPath = "$env:USERPROFILE\.wslconfig"
+    $configPath = "$env:USERPROFILE\.wslconfig"
 
-        $sys = Get-CimInstance Win32_ComputerSystem
+    try {
+        $sys = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
         $totalMem = [math]::Floor($sys.TotalPhysicalMemory / 1GB)
         $cpuCount = $sys.NumberOfLogicalProcessors
 
@@ -311,12 +298,12 @@ debugConsole=false
 nestedVirtualization=false
 kernelCommandLine=quiet elevator=noop
 vmIdleTimeout=0
-"@ | Set-Content -Encoding UTF8 -Path $configPath -Force
+"@ | Set-Content -Encoding UTF8 -Path $configPath -Force -ErrorAction Stop
 
         Write-Host "`t.wslconfig written with $allocMem GB and $cpuCount CPUs." -ForegroundColor DarkGray
     }
     catch {
-        Write-Host "Failed to write .wslconfig: $($_.Exception.Message)" -ForegroundColor Yellow
+        throw "Write-WSLConfig failed: $($_.Exception.Message)"
     }
 }
 
@@ -331,12 +318,13 @@ function Invoke-WSLSetupScript {
         Send-ToWslHome $localScriptPath $remoteScriptUrl "$scriptFileName"
 
         # Execute setup script
-        Invoke-Wsl "/home/$LINUX_USER/$scriptFileName"
+        Invoke-Wsl "/home/$LINUX_USER/$scriptFileName" -Passthru
 
-        wsl --shutdown
+        # Shutdown WSL to finalize configuration
+        wsl --shutdown *> $null
     }
     catch {
-        Write-Host "  Failed to execute setup-ubuntu.sh in WSL: $($_.Exception.Message)" -ForegroundColor Red
+        # throw "Invoke-WSLSetupScript failed: $($_.Exception.Message)"
     }
 }
 
@@ -344,7 +332,7 @@ function Install-Chocolatey {
     Write-Host "`n - Installing Chocolatey..."
 
     if (Get-Command choco -ErrorAction SilentlyContinue) {
-        # update Chocolatey if already installed
+        # Update Chocolatey if already installed
         Install-ChocoPackage -PackageName "chocolatey"
         return
     }
@@ -356,61 +344,61 @@ function Install-Chocolatey {
         $chocoScript = "$env:TEMP\install-choco.ps1"
         Invoke-WebRequest -Uri "https://community.chocolatey.org/install.ps1" -OutFile $chocoScript -UseBasicParsing -ErrorAction Stop
 
-        powershell -NoProfile -ExecutionPolicy Bypass -File $chocoScript *> $null
+        $powerShellExe = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $output = & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $chocoScript 2>&1
+
         if ($LASTEXITCODE -ne 0) {
-            throw "Chocolatey install script failed (exit code $LASTEXITCODE)"
+            throw "Chocolatey install script failed (exit code $LASTEXITCODE): $output"
         }
 
         Remove-Item $chocoScript -Force -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Host "  Chocolatey installation failed: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+        throw "Install-Chocolatey failed: $($_.Exception.Message)"
     }
 }
 
 function Install-NerdFontFiraCode {
     Write-Host "`n - Installing Nerd Font Fira Code"
-    
+
     try {
         $fontZipName = "FiraCode.zip"
         $tempZipPath = "$env:TEMP\$fontZipName"
         $extractPath = "$env:TEMP\FiraCodeFont"
-        
-        # Cleanup previous download and extract paths
+
+        # Cleanup previous downloads
         if (Test-Path $tempZipPath) { Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue }
         if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue }
-        
+
         # Fetch latest Nerd Fonts release
         $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest" `
             -Headers @{ "User-Agent" = "PowerShell" }
+
         $asset = $release.assets | Where-Object { $_.name -like "*$fontZipName" }
-        
         if (-not $asset) {
-            Write-Host "`tFiraCode.zip not found in latest Nerd Fonts release." -ForegroundColor Red
-            return
+            throw "FiraCode.zip not found in latest Nerd Fonts release."
         }
-        
+
         # Download and extract
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempZipPath -ErrorAction Stop
         Expand-Archive -Path $tempZipPath -DestinationPath $extractPath -Force -ErrorAction Stop
-        
-        # Get all font files and install them
+
+        # Install all font files
         $fontFiles = Get-ChildItem -Path $extractPath -Recurse -Include *.ttf, *.otf -ErrorAction Stop
         $successCount = 0
-        $totalCount = $fontFiles.Count
-        
+
         foreach ($fontFile in $fontFiles) {
             if (Install-Font -FontPath $fontFile.FullName) {
                 $successCount++
             }
         }
-        
+
         # Cleanup
         Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue
         Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
-    } catch {
-        Write-Host "`tFiraCode Nerd Font installation failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    catch {
+        Write-Host "`tInstall-NerdFontFiraCode failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
@@ -492,12 +480,12 @@ function Open-AppsForFirstTime {
 
     # Refresh environment variables to pick up newly installed executables
     $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-            [System.Environment]::GetEnvironmentVariable("Path", "User")
+                [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     $apps = @(
         @{ name = "VS Code"; exe = "code"; args = $null; process = "Code" },
         @{ name = "Cursor IDE"; exe = "cursor"; args = $null; process = "Cursor" },
-        @{ name = "Notepad++"; exe = "notepad++.exe"; args = "$env:APPDATA\Notepad++\stylers.xml"; process = "notepad++" }
+        @{ name = "Notepad++"; exe = "notepad++.exe"; args = "$env:APPDATA\Notepad++\stylers.xml"; process = "notepad++" },
         @{ name = "Windows Terminal"; exe = "wt.exe"; args = $null; process = "WindowsTerminal" }
     )
 
@@ -527,7 +515,7 @@ function Open-AppsForFirstTime {
 
                 while ($elapsed -lt $timeoutMs) {
                     $readyProc = Get-Process -Name $app.process -ErrorAction SilentlyContinue |
-                    Where-Object { $_.MainWindowHandle -ne 0 }
+                                 Where-Object { $_.MainWindowHandle -ne 0 }
 
                     if ($readyProc) { break }
 
@@ -543,7 +531,7 @@ function Open-AppsForFirstTime {
                 }
             }
             catch {
-                Write-Host "`tFailed to launch or close $($app.name): $($_.Exception.Message)" -ForegroundColor Red
+                throw "Open-AppsForFirstTime: Failed to launch or close $($app.name): $($_.Exception.Message)"
             }
         } -ArgumentList $app
 
@@ -551,7 +539,17 @@ function Open-AppsForFirstTime {
     }
 
     # Wait for all jobs to finish
-    $jobs | Wait-Job | ForEach-Object { Receive-Job $_; Remove-Job $_ }
+    $jobs | Wait-Job | ForEach-Object {
+        try {
+            Receive-Job $_ -ErrorAction Stop
+        }
+        catch {
+            throw "Open-AppsForFirstTime: Job failed - $($_.Exception.Message)"
+        }
+        finally {
+            Remove-Job $_ -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Set-FiraCodeFontInEditors {
@@ -575,7 +573,10 @@ function Set-FiraCodeFontInEditors {
                 $json = Get-Content $path -Raw
                 $settings = $json | ConvertFrom-Json -ErrorAction Stop
 
-                if (-not $settings.editor) { $settings | Add-Member -MemberType NoteProperty -Name editor -Value @{} }
+                if (-not $settings.editor) {
+                    $settings | Add-Member -MemberType NoteProperty -Name editor -Value @{}
+                }
+
                 $settings.editor.fontFamily = $FONT_NAME
                 $settings.editor.fontSize = $fontSize
                 $settings.editor.fontLigatures = $true
@@ -584,39 +585,37 @@ function Set-FiraCodeFontInEditors {
             $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $path -Encoding UTF8
         }
         catch {
-            Write-Host "   Failed to update $name in $editors[$name] settings: $($_.Exception.Message)" -ForegroundColor Yellow
+            throw "Set-FiraCodeFontInEditors: Failed to update $name settings ($path): $($_.Exception.Message)"
         }
     }
 
     $stylersPath = "$env:APPDATA\Notepad++\stylers.xml"
+
     if (Test-Path $stylersPath) {
         try {
             $content = Get-Content $stylersPath -Raw
 
-            # Match only the Default Style line inside GlobalStyles
             $pattern = '<WidgetStyle name="Default Style"([^>]*)>'
             if ($content -match $pattern) {
                 $original = $matches[0]
 
-                # Replace fontName and fontSize safely
                 $patched = $original `
                     -replace 'fontName="[^"]*"', "fontName=`"$FONT_NAME`"" `
                     -replace 'fontSize="[^"]*"', 'fontSize="11"'
 
-                $newContent = $content -replace [regex]::Escape($original), [regex]::Escape($patched) -replace '\\', ''
-
+                $newContent = $content -replace [regex]::Escape($original), $patched
                 Set-Content -Path $stylersPath -Value $newContent -Encoding Default
             }
             else {
-                Write-Host "   Default Style not found in Notepad++ stylers.xml: $($_.Exception.Message)" -ForegroundColor Yellow
+                throw "Set-FiraCodeFontInEditors: <WidgetStyle name='Default Style'> not found in stylers.xml"
             }
         }
         catch {
-            Write-Host "   Failed to patch Notepad++ stylers.xml: $($_.Exception.Message)" -ForegroundColor Yellow
+            throw "Set-FiraCodeFontInEditors: Failed to patch Notepad++ stylers.xml: $($_.Exception.Message)"
         }
     }
     else {
-        Write-Host "   Notepad++ stylers.xml not found. Skipping: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "`tNotepad++ stylers.xml not found. Skipping." -ForegroundColor DarkGray
     }
 }
 
@@ -626,11 +625,12 @@ function Set-WindowsTerminalSettings {
     $settingsPath = Get-WindowsTerminalSettingsPath
 
     if (-not $settingsPath) {
+        Write-Host "`tWindows Terminal settings.json not found. Skipping." -ForegroundColor DarkGray
         return
     }
 
     try {
-        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction Stop
 
         # Ensure profiles and defaults exist
         if (-not $json.profiles) {
@@ -661,10 +661,10 @@ function Set-WindowsTerminalSettings {
             $json.defaultProfile = $ubuntu.guid.ToString()
         }
 
-        $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $settingsPath
+        $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $settingsPath -ErrorAction Stop
     }
     catch {
-        Write-Host "`tCould not apply Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Yellow
+        throw "Set-WindowsTerminalSettings failed: $($_.Exception.Message)"
     }
 }
 
@@ -693,8 +693,8 @@ function Remove-WindowsTerminalSettings {
 
 function Set-WslZshEnvironment {
     $localConfigPath = "$PSScriptRoot/configs"
-    $remoteZshrcUrl = $GITHUB_URI + "/configs/.zshrc"
-    $remoteStarshipUrl = $GITHUB_URI + "/configs/starship.toml"
+    $remoteZshrcUrl = "$GITHUB_URI/configs/.zshrc"
+    $remoteStarshipUrl = "$GITHUB_URI/configs/starship.toml"
 
     Write-Host "`n - Setting .zshrc and starship.toml configs into WSL..."
 
@@ -705,14 +705,13 @@ function Set-WslZshEnvironment {
         Send-ToWslHome "$localConfigPath/starship.toml" "$remoteStarshipUrl" "$targetDir/starship/starship.toml"
     }
     catch {
-        Write-Host "   Failed to install .zshrc: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
+        throw "Set-WslZshEnvironment failed: $($_.Exception.Message)"
     }
 }
 
 function Send-CustomScripts {
     $localScriptsPath = "$PSScriptRoot/scripts"
-    $remoteScriptsUrl = $GITHUB_URI + "/scripts"
+    $remoteScriptsUrl = "$GITHUB_URI/scripts"
 
     Write-Host "`n - Sending custom scripts to WSL..."
 
@@ -721,7 +720,7 @@ function Send-CustomScripts {
         Send-ToWslHome "$localScriptsPath/login-ecr.sh" "$remoteScriptsUrl/login-ecr.sh" ".scripts/login-ecr.sh"
     }
     catch {
-        Write-Host "`tFailed to send custom scripts: $($_.Exception.Message)" -ForegroundColor Red
+        throw "Send-CustomScripts failed: $($_.Exception.Message)"
     }
 }
 
@@ -730,34 +729,46 @@ Write-Host "`n========================================================" -Foregro
 Write-Host "         WSL Full Developer Setup Starting" -ForegroundColor DarkYellow
 Write-Host "========================================================" -ForegroundColor DarkYellow
 
-Test-RunningAsAdministrator
+try{
+    Test-RunningAsAdministrator
 
-# Install and setup WSL
-Enable-WSLFeatures
-Install-WSLKernel
-Install-Distro
-Add-LinuxUserWithSudo
-Set-DefaultWSLUser
-Write-WSLConfig
-Set-WslZshEnvironment
-Send-CustomScripts
-Invoke-WSLSetupScript
+    # Install and setup WSL
+    Enable-WSLFeatures
+    Install-WSLKernel
+    Install-Distro
+    Add-LinuxUserWithSudo
+    Set-DefaultWSLUser
+    Write-WSLConfig
+    Set-WslZshEnvironment
+    Send-CustomScripts
+    Invoke-WSLSetupScript
 
-# Install tools via Chocolatey or Winget
-Install-WingetPackage -PackageId "Microsoft.WindowsTerminal"
-Install-WingetPackage -PackageId "Notepad++.Notepad++"
-Install-WingetPackage -PackageId "Microsoft.VisualStudioCode"
-Install-WingetPackage -PackageId "Anysphere.Cursor"
-Install-WingetPackage -PackageId "JetBrains.IntelliJIDEA.Ultimate"
-Install-Chocolatey
+    # Install tools via Chocolatey or Winget
+    Install-WingetPackage -PackageId "Microsoft.WindowsTerminal"
+    Install-WingetPackage -PackageId "Notepad++.Notepad++"
+    Install-WingetPackage -PackageId "Microsoft.VisualStudioCode"
+    Install-WingetPackage -PackageId "Anysphere.Cursor"
+    Install-WingetPackage -PackageId "JetBrains.IntelliJIDEA.Ultimate"
+    Install-Chocolatey
 
-# Install FiraCode font
-Install-NerdFontFiraCode
+    # Install FiraCode font
+    Install-NerdFontFiraCode
 
-# Configure Windows Terminal and editors with FiraCode font
-Remove-WindowsTerminalSettings
-Open-AppsForFirstTime
-Set-FiraCodeFontInEditors
-Set-WindowsTerminalSettings
+    # Configure Windows Terminal and editors with FiraCode font
+    Remove-WindowsTerminalSettings
+    Open-AppsForFirstTime
+    Set-FiraCodeFontInEditors
+    Set-WindowsTerminalSettings
+}catch{
+    Write-Host "`nERROR: $($_.Exception.Message)" -ForegroundColor Red
+
+    # Only pause if invoked via `irm ... | iex`
+    if ($MyInvocation.InvocationName -eq 'iex') {
+        Write-Host "`n[Press Enter to exit]" -ForegroundColor Yellow
+        Read-Host
+    }
+
+    exit 1
+}
 
 Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
