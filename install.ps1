@@ -445,13 +445,6 @@ namespace FontApi {
     $FontsDir = Join-Path $env:WINDIR 'Fonts'
     $RegPath  = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
 
-    # Require elevation (admin rights)
-    if (-not ([Security.Principal.WindowsPrincipal] `
-        [Security.Principal.WindowsIdentity]::GetCurrent()
-    ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-        throw 'Install-SysFont must run as administrator.'
-    }
-
     # Normalize and resolve the source font path
     $src      = (Resolve-Path $FontPath -ErrorAction Stop).ProviderPath
     $fileName = Split-Path $src -Leaf
