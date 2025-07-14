@@ -364,60 +364,128 @@ function Install-Chocolatey {
 }
 
 function Install-NerdFontFiraCode {
+    Write-Host "`n - Installing Nerd Font Fira Code"
+    
     try {
         $fontZipName = "FiraCode.zip"
         $tempZipPath = "$env:TEMP\$fontZipName"
         $extractPath = "$env:TEMP\FiraCodeFont"
-        $userFonts = "$env:LOCALAPPDATA\Microsoft\Windows\Fonts"
-        $registryPath = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts"
-
+        
         # Cleanup previous download and extract paths
         if (Test-Path $tempZipPath) { Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue }
         if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue }
-
-        # Ensure fonts folder exists
-        if (-not (Test-Path $userFonts)) {
-            New-Item -ItemType Directory -Path $userFonts -Force | Out-Null
-        }
-
+        
         # Fetch latest Nerd Fonts release
         $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest" `
             -Headers @{ "User-Agent" = "PowerShell" }
-
         $asset = $release.assets | Where-Object { $_.name -like "*$fontZipName" }
+        
         if (-not $asset) {
-	    Write-Host "`tFiraCode.zip not found in latest Nerd Fonts release." -ForegroundColor Red
+            Write-Host "`tFiraCode.zip not found in latest Nerd Fonts release." -ForegroundColor Red
             return
         }
-
+        
         # Download and extract
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempZipPath -ErrorAction Stop
         Expand-Archive -Path $tempZipPath -DestinationPath $extractPath -Force -ErrorAction Stop
-
-        # Install each font
-        Get-ChildItem -Path $extractPath -Recurse -Include *.ttf -ErrorAction Stop | ForEach-Object {
-            $sourcePath = $_.FullName
-            $fontFileName = $_.Name
-            $targetPath = Join-Path $userFonts $fontFileName
-
-            # Overwrite existing file silently
-            Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
-
-            # Registry name format: "FiraCode Nerd Font Regular (TrueType)"
-            $fontDisplayName = "$($_.BaseName) (TrueType)"
-
-            # Register in per-user fonts
-            New-ItemProperty -Path $registryPath `
-                -Name $fontDisplayName `
-                -Value $fontFileName `
-                -PropertyType String `
-                -Force | Out-Null
+        
+        # Get all font files and install them
+        $fontFiles = Get-ChildItem -Path $extractPath -Recurse -Include *.ttf, *.otf -ErrorAction Stop
+        $successCount = 0
+        $totalCount = $fontFiles.Count
+        
+        foreach ($fontFile in $fontFiles) {
+            if (Install-Font -FontPath $fontFile.FullName) {
+                $successCount++
+            }
         }
-    }
-    catch {
+        
+        # Cleanup
+        Remove-Item $tempZipPath -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+    } catch {
         Write-Host "`tFiraCode Nerd Font installation failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
+
+function Install-Font {
+    param (
+        [Parameter(Mandatory, Position = 0)]
+        [string]$FontPath
+    )
+
+    # Define native interop methods (GDI and User32) if not already loaded
+    if (-not ([Type]::GetType('FontApi.Native'))) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace FontApi {
+    public static class Native {
+        [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+        public static extern int AddFontResourceExW(string lpFileName, uint fl, IntPtr pdv);
+
+        [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetFontResourceInfoW(string lpFileName, ref int cbBuffer, StringBuilder lpBuffer, uint dwQueryType);
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    }
+}
+"@ -PassThru | Out-Null
+    }
+
+    # Constants used in native API calls
+    $FR_PRIVATE       = 0x10
+    $GFRI_DESCRIPTION = 1
+    $WM_FONTCHANGE    = 0x001D
+    $HWND_BROADCAST   = [IntPtr]0xFFFF
+
+    $FontsDir = Join-Path $env:WINDIR 'Fonts'
+    $RegPath  = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+
+    # Require elevation (admin rights)
+    if (-not ([Security.Principal.WindowsPrincipal] `
+        [Security.Principal.WindowsIdentity]::GetCurrent()
+    ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+        throw 'Install-SysFont must run as administrator.'
+    }
+
+    # Normalize and resolve the source font path
+    $src      = (Resolve-Path $FontPath -ErrorAction Stop).ProviderPath
+    $fileName = Split-Path $src -Leaf
+    $dst      = Join-Path $FontsDir $fileName
+
+    # Copy font file to system fonts directory (overwrites if exists)
+    Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop
+
+    # Add font to in-memory font table so apps can see it without restart
+    [void][FontApi.Native]::AddFontResourceExW($dst, $FR_PRIVATE, [IntPtr]::Zero)
+
+    # Query Windows for the human-readable display name of the font
+    $len = 0
+    [void][FontApi.Native]::GetFontResourceInfoW($dst, [ref]$len, $null, $GFRI_DESCRIPTION)
+    $sb  = New-Object System.Text.StringBuilder ($len)
+    [void][FontApi.Native]::GetFontResourceInfoW($dst, [ref]$len, $sb, $GFRI_DESCRIPTION)
+    $friendly = $sb.ToString().Trim()
+
+    # Compose registry key name (e.g., "FiraCode Nerd Font (TrueType)")
+    $suffix  = if ($fileName -match '\.tt[cf]$') { ' (TrueType)' } else { ' (OpenType)' }
+    $regName = "$friendly$suffix"
+
+    # Create or update registry entry for this font
+    $existing = Get-ItemProperty -Path $RegPath -Name $regName -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        New-ItemProperty -Path $RegPath -Name $regName -Value $fileName -PropertyType String -Force | Out-Null
+    } elseif ($existing.$regName -ne $fileName) {
+        Set-ItemProperty -Path $RegPath -Name $regName -Value $fileName -Force
+    }
+
+    # Notify running apps that font list has changed
+    [void][FontApi.Native]::SendMessageW($HWND_BROADCAST, $WM_FONTCHANGE, [IntPtr]::Zero, [IntPtr]::Zero)
+}
+
 
 # Open Windows terminal and Editors to generate setting files
 function Open-AppsForFirstTime {
