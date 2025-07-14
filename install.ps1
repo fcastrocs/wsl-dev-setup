@@ -152,7 +152,14 @@ function Enable-WSLFeatures {
 
     $restartRequired = $false
 
-    dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart *> $null
+    # Determine correct path to dism.exe
+    $dismPath = "$env:WINDIR\System32\dism.exe"
+    if (-not (Test-Path $dismPath)) {
+        $dismPath = "$env:WINDIR\Sysnative\dism.exe"
+    }
+
+    # Enable Microsoft-Windows-Subsystem-Linux
+    & $dismPath /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart *> $null
     if ($LASTEXITCODE -eq 3010) {
         $restartRequired = $true
     } elseif ($LASTEXITCODE -ne 0) {
@@ -160,7 +167,8 @@ function Enable-WSLFeatures {
         exit 1
     }
 
-    dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart *> $null
+    # Enable VirtualMachinePlatform
+    & $dismPath /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart *> $null
     if ($LASTEXITCODE -eq 3010) {
         $restartRequired = $true
     } elseif ($LASTEXITCODE -ne 0) {
@@ -172,9 +180,8 @@ function Enable-WSLFeatures {
         Write-Host "Restart required to complete WSL setup." -ForegroundColor Red
         exit 1
     }
-
-    Write-Host "WSL and Virtual Machine Platform enabled successfully." -ForegroundColor Green
 }
+
 
 function Install-WSLKernel {
     Write-Host "`n - Updating WSL kernel..."
