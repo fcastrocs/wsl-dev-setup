@@ -1,59 +1,145 @@
-$restartRequired = $false
-$terminalSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+# Reverse WSL Full Developer Setup Script
 
-# Check if running as Administrator
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "This script must be run as Administrator!" -ForegroundColor Red
-    exit 1
+# Helper: Confirm running as Administrator
+function Test-RunningAsAdministrator {
+    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Host "ERROR: This script must be run as Administrator!" -ForegroundColor Red
+        exit 1
+    }
 }
 
-Write-Host "Uninstalling WSL..."
+# Remove Windows Terminal settings
+function Remove-WindowsTerminalSettings {
+    $settingsPath = Get-WindowsTerminalSettingsPath
+    if ($settingsPath) {
+        Remove-Item -Path $settingsPath -Force -ErrorAction SilentlyContinue
+        Write-Host " - Removed Windows Terminal settings.json" -ForegroundColor DarkGray
+    }
+}
 
-wsl --shutdown *> $null
-wsl --unregister Ubuntu *> $null
+# Get Windows Terminal settings path
+function Get-WindowsTerminalSettingsPath {
+    $possiblePaths = @(
+        "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+        "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json",
+        "$env:APPDATA\Microsoft\Windows Terminal\settings.json"
+    )
 
-# Remove Ubuntu from Microsoft Store (if installed via Store)
-$ubuntuPackages = Get-AppxPackage | Where-Object { $_.Name -like "*Ubuntu*" }
-if ($ubuntuPackages) {
-    foreach ($package in $ubuntuPackages) {
-        Remove-AppxPackage -Package $package.PackageFullName -ErrorAction SilentlyContinue
+    foreach ($path in $possiblePaths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
+    return $null
+}
+
+# Remove installed fonts
+function Remove-FiraCodeFont {
+    Write-Host " - Removing FiraCode Nerd Fonts..." -ForegroundColor DarkGray
+    $fontsPath = Join-Path $env:WINDIR 'Fonts'
+    $fontFiles = Get-ChildItem -Path $fontsPath -Filter "FiraCode*" -Include *.ttf, *.otf -ErrorAction SilentlyContinue
+
+    foreach ($font in $fontFiles) {
+        try {
+            Remove-Item -Path $font.FullName -Force -ErrorAction SilentlyContinue
+            Write-Host "   Removed: $($font.Name)" -ForegroundColor DarkGray
+        } catch {
+            Write-Host "   Failed to remove font: $($font.Name)" -ForegroundColor Yellow
+        }
+    }
+}
+
+# Uninstall applications via winget
+function Uninstall-WingetPackage {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$PackageName
+    )
+    
+    try {
+        $wingetList = winget list --id $PackageName --exact *>$null 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            winget uninstall --id $PackageName --silent --force --accept-source-agreements *>$null 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Winget uninstall failed with exit code $LASTEXITCODE"
+            }
+        }
+    }
+    catch {
+        Write-Error "Failed to uninstall $PackageName`: $($_.Exception.Message)"
     }
 }
 
 # Disable WSL features
-dism.exe /online /disable-feature /featurename:Microsoft-Windows-Subsystem-Linux /norestart > $null 2>&1
-dism.exe /online /disable-feature /featurename:VirtualMachinePlatform /norestart > $null 2>&1
-if ($LASTEXITCODE -eq 3010) {
-    $restartRequired = $true
-} elseif ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to disable WSL (exit code $LASTEXITCODE)" -ForegroundColor Red
+function Disable-WSLFeatures {
+    Write-Host " - Disabling WSL and Virtual Machine Platform..." -ForegroundColor DarkGray
+
+    & "$env:windir\\System32\\dism.exe" /online /disable-feature /featurename:VirtualMachinePlatform /norestart *> $null
+    & "$env:windir\\System32\\dism.exe" /online /disable-feature /featurename:Microsoft-Windows-Subsystem-Linux /norestart *> $null
 }
 
-# Remove Ubuntu profiles from Windows Terminal
-if (Test-Path $terminalSettingsPath) {
+# Unregister and clean WSL
+function Remove-WSLDistro {
+    $distro = "Ubuntu"
     try {
-        $settings = Get-Content $terminalSettingsPath -Raw | ConvertFrom-Json
-
-        # Remove any profile that is named "Ubuntu" and comes from Microsoft.WSL
-        if ($settings.profiles -and $settings.profiles.list) {
-            $settings.profiles.list = $settings.profiles.list | Where-Object {
-                -not ($_.name -eq "Ubuntu" -and $_.source -eq "Microsoft.WSL")
-            }
-        }
-
-        # Remove the defaultProfile property if it exists
-        if ($settings.PSObject.Properties.Name -contains "defaultProfile") {
-            $settings.PSObject.Properties.Remove("defaultProfile")
-        }
-
-        # Write the modified settings back to the file
-        $settings | ConvertTo-Json -Depth 10 | Set-Content $terminalSettingsPath -ErrorAction SilentlyContinue
+        wsl --unregister $distro *>$null 2>&1
+        Write-Host " - Unregistered WSL distro: $distro" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "   Failed to unregister WSL distro: $($_.Exception.Message)" -ForegroundColor Yellow
     }
-    catch {
-        Write-Host "Failed to modify Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Red
+
+    $paths = @(
+        "$env:USERPROFILE\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu*",
+        "$env:USERPROFILE\AppData\Local\Packages\CanonicalGroupLimited.UbuntuonWindows*",
+        "$env:LOCALAPPDATA\lxss"
+    )
+
+    foreach ($p in $paths) {
+        Get-ChildItem -Path (Split-Path $p -Parent) -Filter (Split-Path $p -Leaf) -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Host " - Cleaned up leftover WSL data folders" -ForegroundColor DarkGray
+}
+
+# Uninstall Chocolatey
+function Uninstall-Chocolatey {
+    $chocoPath = "$env:ProgramData\chocolatey"
+    if (Test-Path $chocoPath) {
+        try {
+            Remove-Item -Path $chocoPath -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host " - Chocolatey directory removed" -ForegroundColor DarkGray
+        } catch {
+            Write-Host "   Failed to remove Chocolatey directory" -ForegroundColor Yellow
+        }
+    }
+
+    $envPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Machine)
+    if ($envPath -like "*chocolatey*") {
+        $newPath = ($envPath -split ";" | Where-Object { $_ -notmatch "chocolatey" }) -join ";"
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Machine)
     }
 }
 
-if ($restartRequired) {
-    Write-Host "Restart required to completely disable WSL" -ForegroundColor Yellow
-}
+# Entry
+Write-Host "`n========================================================" -ForegroundColor DarkYellow
+Write-Host "         Reversing WSL Developer Setup" -ForegroundColor DarkYellow
+Write-Host "========================================================" -ForegroundColor DarkYellow
+
+Test-RunningAsAdministrator
+
+# Revert actions
+Remove-WindowsTerminalSettings
+Remove-FiraCodeFont
+
+Uninstall-WingetPackage "Microsoft.WindowsTerminal"
+Uninstall-WingetPackage "Notepad++.Notepad++"
+# Uninstall-WingetPackage "Microsoft.VisualStudioCode"
+Uninstall-WingetPackage "Anysphere.Cursor"
+Uninstall-WingetPackage "JetBrains.IntelliJIDEA.Ultimate"
+
+Uninstall-Chocolatey
+Remove-WSLDistro
+Disable-WSLFeatures
+
+Write-Host "`nWSL Developer Setup Reversed." -ForegroundColor Green
