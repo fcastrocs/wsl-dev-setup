@@ -314,18 +314,17 @@ vmIdleTimeout=0
 }
 
 function Invoke-WSLSetupScript {
-    param (
-        [string]$localScriptPath = "$PSScriptRoot\scripts\setup-ubuntu.sh",
-        [string]$remoteScriptUrl = "$GITHUB_URI/scripts/setup-ubuntu.sh"
-    )
+    $scriptFileName = "setup-ubuntu.sh"
+    $localScriptPath = "$PSScriptRoot\scripts\$scriptFileName"
+    $remoteScriptUrl = "$GITHUB_URI/scripts/$scriptFileName"
 
     Write-Host "`n - Installing developer tools in WSL..."
 
     try {
-        Send-ToWslHome $localScriptPath $remoteScriptUrl "wsl-init.sh"
+        Send-ToWslHome $localScriptPath $remoteScriptUrl "$scriptFileName"
 
         # Execute setup script
-        Invoke-Wsl "/home/$LINUX_USER/wsl-init.sh"
+        Invoke-Wsl "/home/$LINUX_USER/$scriptFileName"
 
         wsl --shutdown
     }
