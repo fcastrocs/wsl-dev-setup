@@ -1,7 +1,30 @@
+# Constants
 $DISTRO = "Ubuntu"
 $LINUX_USER = "devuser"
-$FONT_NAME = "FiraCode Nerd Font"
 $GITHUB_URI = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main"
+
+# Font Configuration
+$FONT_NAME = "FiraCode Nerd Font"
+$FONT_SIZE_VSCODE = 14
+$FONT_SIZE_NOTEPAD = 11
+
+# Windows Terminal Settings
+$TERMINAL_COLOR_SCHEME = "One Half Dark"
+
+# Application Packages
+$WINGET_PACKAGES = @(
+    "Microsoft.WindowsTerminal",
+    "Notepad++.Notepad++",
+    "Microsoft.VisualStudioCode",
+    "Anysphere.Cursor",
+    "JetBrains.IntelliJIDEA.Ultimate"
+)
+
+# Custom Scripts
+$CUSTOM_SCRIPTS = @(
+    "login-eks.sh",
+    "login-ecr.sh"
+)
 
 # Run a command in WSL as $LINUX_USER
 function Invoke-Wsl {
@@ -15,7 +38,7 @@ function Invoke-Wsl {
     $bashCommand = "`"$Command`""
 
     $wslArgs = @(
-        '-d', $distro,
+        '-d', $DISTRO,
         '-u', $LINUX_USER,
         '--', 'bash', '-c', $bashCommand
     )
@@ -473,7 +496,6 @@ namespace FontApi {
     [void][FontApi.Native]::SendMessageW($HWND_BROADCAST, $WM_FONTCHANGE, [IntPtr]::Zero, [IntPtr]::Zero)
 }
 
-
 # Open Windows terminal and Editors to generate setting files
 function Open-AppsForFirstTime {
     Write-Host "`n - Getting things ready..."
@@ -560,14 +582,12 @@ function Set-FiraCodeFontInEditors {
         "Cursor IDE" = "$env:APPDATA\Cursor\User\settings.json"
     }
 
-    $fontSize = 14
-
     foreach ($name in $editors.Keys) {
         $path = $editors[$name]
         try {
             if (-not (Test-Path $path)) {
                 New-Item -Path (Split-Path $path) -ItemType Directory -Force | Out-Null
-                $settings = @{ editor = @{ fontFamily = $FONT_NAME; fontSize = $fontSize; fontLigatures = $true } }
+                $settings = @{ editor = @{ fontFamily = $FONT_NAME; fontSize = $FONT_SIZE_VSCODE; fontLigatures = $true } }
             }
             else {
                 $json = Get-Content $path -Raw
@@ -578,7 +598,7 @@ function Set-FiraCodeFontInEditors {
                 }
 
                 $settings.editor.fontFamily = $FONT_NAME
-                $settings.editor.fontSize = $fontSize
+                $settings.editor.fontSize = $FONT_SIZE_VSCODE
                 $settings.editor.fontLigatures = $true
             }
 
@@ -601,7 +621,7 @@ function Set-FiraCodeFontInEditors {
 
                 $patched = $original `
                     -replace 'fontName="[^"]*"', "fontName=`"$FONT_NAME`"" `
-                    -replace 'fontSize="[^"]*"', 'fontSize="11"'
+                    -replace 'fontSize="[^"]*"', "fontSize=`"$FONT_SIZE_NOTEPAD`""
 
                 $newContent = $content -replace [regex]::Escape($original), $patched
                 Set-Content -Path $stylersPath -Value $newContent -Encoding Default
@@ -650,7 +670,7 @@ function Set-WindowsTerminalSettings {
         }
 
         $json.profiles.defaults.font.face = $FONT_NAME
-        $json.profiles.defaults.colorScheme = "One Half Dark"
+        $json.profiles.defaults.colorScheme = $TERMINAL_COLOR_SCHEME
 
         # Set defaultProfile to $DISTRO if found
         $ubuntu = $json.profiles.list | Where-Object {
@@ -716,20 +736,20 @@ function Send-CustomScripts {
     Write-Host "`n - Sending custom scripts to WSL..."
 
     try {
-        Send-ToWslHome "$localScriptsPath/login-eks.sh" "$remoteScriptsUrl/login-eks.sh" ".scripts/login-eks.sh"
-        Send-ToWslHome "$localScriptsPath/login-ecr.sh" "$remoteScriptsUrl/login-ecr.sh" ".scripts/login-ecr.sh"
+        foreach ($script in $CUSTOM_SCRIPTS) {
+            Send-ToWslHome "$localScriptsPath/$script" "$remoteScriptsUrl/$script" ".scripts/$script"
+        }
     }
     catch {
         throw "Send-CustomScripts failed: $($_.Exception.Message)"
     }
 }
 
-
 Write-Host "`n========================================================" -ForegroundColor DarkYellow
 Write-Host "         WSL Full Developer Setup Starting" -ForegroundColor DarkYellow
 Write-Host "========================================================" -ForegroundColor DarkYellow
 
-try{
+try {
     Test-RunningAsAdministrator
 
     # Install and setup WSL
@@ -744,11 +764,9 @@ try{
     Invoke-WSLSetupScript
 
     # Install tools via Chocolatey or Winget
-    Install-WingetPackage -PackageId "Microsoft.WindowsTerminal"
-    Install-WingetPackage -PackageId "Notepad++.Notepad++"
-    Install-WingetPackage -PackageId "Microsoft.VisualStudioCode"
-    Install-WingetPackage -PackageId "Anysphere.Cursor"
-    Install-WingetPackage -PackageId "JetBrains.IntelliJIDEA.Ultimate"
+    foreach ($package in $WINGET_PACKAGES) {
+        Install-WingetPackage -PackageId $package
+    }
     Install-Chocolatey
 
     # Install FiraCode font
@@ -759,7 +777,7 @@ try{
     Open-AppsForFirstTime
     Set-FiraCodeFontInEditors
     Set-WindowsTerminalSettings
-}catch{
+} catch {
     Write-Host "`nERROR: $($_.Exception.Message)" -ForegroundColor Red
 
     # Only pause if invoked via `irm ... | iex`
