@@ -253,11 +253,7 @@ try {
 }
 catch {
     Write-Host "`nERROR: $($_.Exception.Message)" -ForegroundColor Red
-
-    if ($MyInvocation.InvocationName -eq 'iex') {
-        Write-Host "`n[Press Enter to exit]" -ForegroundColor Yellow
-        Read-Host
-    }
-
+    Write-Host "`n[Press Enter to exit]" -ForegroundColor Yellow
+    Read-Host
     exit 1
 }
