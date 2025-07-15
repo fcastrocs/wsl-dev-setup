@@ -777,16 +777,12 @@ try {
     Open-AppsForFirstTime
     Set-FiraCodeFontInEditors
     Set-WindowsTerminalSettings
+
+    Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
 } catch {
     Write-Host "`nERROR: $($_.Exception.Message)" -ForegroundColor Red
-
-    # Only pause if invoked via `irm ... | iex`
-    if ($MyInvocation.InvocationName -eq 'iex') {
-        Write-Host "`n[Press Enter to exit]" -ForegroundColor Yellow
-        Read-Host
-    }
-
+    
+    Write-Host "`n[Press Enter to exit]" -ForegroundColor Yellow
+    Read-Host
     exit 1
 }
-
-Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
