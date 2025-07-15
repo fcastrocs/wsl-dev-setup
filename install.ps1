@@ -144,6 +144,7 @@ function Install-ChocoPackage {
 }
 
 function Update-WingetSources {
+    try { winget } catch {}
     winget source update > $null
 }
 
