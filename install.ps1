@@ -143,6 +143,10 @@ function Install-ChocoPackage {
     }
 }
 
+function Update-WingetSources {
+    winget source update > $null
+}
+
 function Install-WingetPackage {
     param (
         [Parameter(Mandatory)]
@@ -505,10 +509,10 @@ function Open-AppsForFirstTime {
                 [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     $apps = @(
-        @{ name = "VS Code"; exe = "code"; args = $null; process = "Code" },
-        @{ name = "Cursor IDE"; exe = "cursor"; args = $null; process = "Cursor" },
-        @{ name = "Notepad++"; exe = "notepad++.exe"; args = "$env:APPDATA\Notepad++\stylers.xml"; process = "notepad++" },
-        @{ name = "Windows Terminal"; exe = "wt.exe"; args = $null; process = "WindowsTerminal" }
+        @{ name = "VS Code"; exe = "code"; process = "Code" },
+        @{ name = "Cursor IDE"; exe = "cursor"; process = "Cursor" },
+        @{ name = "Notepad++"; exe = "notepad++.exe"; process = "notepad++" },
+        @{ name = "Windows Terminal"; exe = "wt.exe"; process = "WindowsTerminal" }
     )
 
     $jobs = @()
@@ -523,12 +527,8 @@ function Open-AppsForFirstTime {
                     return
                 }
 
-                if ($app.args) {
-                    Start-Process -FilePath $app.exe -ArgumentList $app.args -WindowStyle Minimized
-                }
-                else {
-                    Start-Process -FilePath $app.exe -WindowStyle Minimized
-                }
+
+                Start-Process -FilePath $app.exe -WindowStyle Minimized
 
                 $timeoutMs = 10000
                 $intervalMs = 200
@@ -763,13 +763,11 @@ try {
     Send-CustomScripts
     Invoke-WSLSetupScript
 
-    # Install tools via Chocolatey or Winget
+    Update-WingetSources
     foreach ($package in $WINGET_PACKAGES) {
         Install-WingetPackage -PackageId $package
     }
     Install-Chocolatey
-
-    # Install FiraCode font
     Install-NerdFontFiraCode
 
     # Configure Windows Terminal and editors with FiraCode font
