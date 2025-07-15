@@ -143,32 +143,37 @@ function Install-ChocoPackage {
     }
 }
 
+function Get-WingetPath {
+    $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+    if (Test-Path $wingetPath) {
+        return $wingetPath
+    } else {
+        throw "winget.exe not found in the expected location."
+    }
+}
+
 function Update-WingetSources {
-    try { winget } catch {}
-    winget source update > $null
+    & (Get-WingetPath) source update > $null
 }
 
 function Install-WingetPackage {
-    param (
-        [Parameter(Mandatory)]
-        [string]$PackageId
-    )
+    param ([Parameter(Mandatory)] [string]$PackageId)
 
     Write-Host "`n - Installing package: $PackageId..."
+    $winget = Get-WingetPath
+    $escapedId = [Regex]::Escape($PackageId)
 
     try {
-        # Escape special characters for Select-String (like +, ., etc.)
-        $escapedId = [Regex]::Escape($PackageId)
+        $output = & $winget list --id $PackageId --source winget 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Failed to list packages: $($output -join '; ')" }
 
-        # Check if the package is already installed
-        $installed = winget list --id "$PackageId" --source winget 2>$null | Select-String "$escapedId" -Quiet
-
-        if (-not $installed) {
-            # Install the package silently
-            winget install --id "$PackageId" -e -h --accept-source-agreements --accept-package-agreements *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Install failed for package '$PackageId'"
-            }
+        if (-not ($output | Select-String $escapedId -Quiet)) {
+            & $winget install --id $PackageId -e -h --accept-source-agreements --accept-package-agreements > $null
+            if ($LASTEXITCODE -ne 0) { throw "Install failed for package '$PackageId'" }
+            Write-Host "Package '$PackageId' installed."
+        }
+        else {
+            Write-Host "Package '$PackageId' already installed."
         }
     }
     catch {
