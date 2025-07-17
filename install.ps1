@@ -152,6 +152,14 @@ function Get-WingetPath {
     }
 }
 
+function Register-Winget {
+    try {
+        Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop
+    } catch {
+        throw "Register-Winget registration failed: $($_.Exception.Message)"
+    }
+}
+
 function Update-WingetSources {
     & (Get-WingetPath) source update > $null
 }
@@ -775,6 +783,7 @@ try {
     Send-CustomScripts
     Invoke-WSLSetupScript
 
+    Register-Winget
     Update-WingetSources
     foreach ($package in $WINGET_PACKAGES) {
         Install-WingetPackage -PackageName $package
