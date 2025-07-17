@@ -157,23 +157,29 @@ function Update-WingetSources {
 }
 
 function Install-WingetPackage {
-    param ([Parameter(Mandatory)] [string]$PackageId)
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$PackageName
+    )
 
-    Write-Host "`n - Installing package: $PackageId..."
+    Write-Host "`n - Installing package: $PackageName..."
     $winget = Get-WingetPath
-    $escapedId = [Regex]::Escape($PackageId)
+    $escapedName = [Regex]::Escape($PackageName)
 
     try {
-        $output = & $winget list --id $PackageId --source winget 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "Failed to list packages: $($output -join '; ')" }
-
-        if (-not ($output | Select-String $escapedId -Quiet)) {
-            & $winget install --id $PackageId -e -h --accept-source-agreements --accept-package-agreements > $null
-            if ($LASTEXITCODE -ne 0) { throw "Install failed for package '$PackageId'" }
-            Write-Host "Package '$PackageId' installed."
+        # Check if package is already installed
+        $installed = & $winget list --id $PackageName --exact --source winget 2>$null
+        if ($installed -and $installed -match $escapedName) {
+            # Update package if installed
+            & $winget upgrade --id $PackageName --exact --source winget --silent --accept-package-agreements --accept-source-agreements | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upgrade $PackageName" }
+            Write-Host "`t$PackageName upgraded"
         }
         else {
-            Write-Host "Package '$PackageId' already installed."
+            # Install package if not installed
+            & $winget install --id $PackageName --exact --source winget --silent --accept-package-agreements --accept-source-agreements | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to install $PackageName" }
+            Write-Host "`t$PackageName installed"
         }
     }
     catch {
@@ -771,7 +777,7 @@ try {
 
     Update-WingetSources
     foreach ($package in $WINGET_PACKAGES) {
-        Install-WingetPackage -PackageId $package
+        Install-WingetPackage -PackageName $package
     }
     Install-Chocolatey
     Install-NerdFontFiraCode
