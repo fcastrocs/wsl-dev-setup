@@ -152,11 +152,14 @@ function Get-WingetPath {
     }
 }
 
-function Register-Winget {
+function Ensure-WinGetReady {
+    Write-Host "\n - Ensuring WinGet is ready..."
     try {
-        Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop
+        Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
+        Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery -ErrorAction Stop | Out-Null
+        Repair-WinGetPackageManager
     } catch {
-        throw "Register-Winget registration failed: $($_.Exception.Message)"
+        throw "Ensure-WinGetReady failed: $_"
     }
 }
 
@@ -783,12 +786,12 @@ try {
     Send-CustomScripts
     Invoke-WSLSetupScript
 
-    Register-Winget
+    Ensure-WinGetReady
     Update-WingetSources
     foreach ($package in $WINGET_PACKAGES) {
         Install-WingetPackage -PackageName $package
     }
-    Install-Chocolatey
+    # Install-Chocolatey
     Install-NerdFontFiraCode
 
     # Configure Windows Terminal and editors with FiraCode font
