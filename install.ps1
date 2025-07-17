@@ -153,13 +153,14 @@ function Get-WingetPath {
 }
 
 function Ensure-WinGetReady {
-    Write-Host "\n - Ensuring WinGet is ready..."
+    Write-Host "`n - Ensuring WinGet is ready..."
+
     try {
         Install-PackageProvider -Name NuGet -Force -ErrorAction Stop | Out-Null
         Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery -ErrorAction Stop | Out-Null
-        Repair-WinGetPackageManager
+        Repair-WinGetPackageManager -AllUsers
     } catch {
-        throw "Ensure-WinGetReady failed: $_"
+        throw"Ensure-WinGetReady failed: $_"
     }
 }
 
@@ -802,7 +803,7 @@ try {
 
     Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
 } catch {
-    Write-Host "`nERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "`nERROR: $_" -ForegroundColor Red
     
     Write-Host "`n[Press Enter to exit]" -ForegroundColor Yellow
     Read-Host
