@@ -175,7 +175,7 @@ function Update-WingetSources {
 
 function Install-WingetPackage {
     param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$PackageName
     )
 
@@ -184,19 +184,26 @@ function Install-WingetPackage {
     $escapedName = [Regex]::Escape($PackageName)
 
     try {
-        # Check if package is already installed
+        # Check if the package is installed
         $installed = & $winget list --id $PackageName --exact --source winget 2>$null
-        if ($installed -and $installed -match $escapedName) {
-            # Update package if installed
-            & $winget upgrade --id $PackageName --exact --source winget --silent --accept-package-agreements --accept-source-agreements | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Failed to upgrade $PackageName" }
-            Write-Host "`t$PackageName upgraded"
+        $isInstalled = $installed -and $installed -match $escapedName
+
+        if ($isInstalled) {
+            # Check if an upgrade is available
+            $upgradeAvailable = & $winget upgrade --id $PackageName --exact --source winget 2>$null
+            if ($upgradeAvailable -and $upgradeAvailable -match $escapedName) {
+                & $winget upgrade --id $PackageName --exact --source winget --silent --accept-package-agreements --accept-source-agreements | Out-Null
+                Write-Host "`t$PackageName upgraded" -ForegroundColor DarkGray
+            }
+            else {
+                Write-Host "`t$PackageName is already up to date" -ForegroundColor DarkGray
+            }
         }
         else {
-            # Install package if not installed
+            # Install if not installed
             & $winget install --id $PackageName --exact --source winget --silent --accept-package-agreements --accept-source-agreements | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Failed to install $PackageName" }
-            Write-Host "`t$PackageName installed"
+            Write-Host "`t$PackageName installed" -ForegroundColor DarkGray
         }
     }
     catch {
