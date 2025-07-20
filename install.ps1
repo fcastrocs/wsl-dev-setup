@@ -24,6 +24,7 @@ $WINGET_PACKAGES = @(
 $CUSTOM_SCRIPTS = @(
     "login-eks.sh",
     "login-ecr.sh"
+    "gim"
 )
 
 # Run a command in WSL as $LINUX_USER
@@ -82,8 +83,10 @@ function Send-ToWslHome {
             $base64 = [Convert]::ToBase64String($bytes)
             Invoke-Wsl "echo '$base64' | base64 -d > '$targetPath'"
 
-            # Set execution permission if file is .sh
-            if ($targetPath -like '*.sh') {
+            if (
+                $targetPath -like '*/.local/bin*' -or
+                $targetPath.ToLower().EndsWith(".sh")
+            ) {
                 Invoke-Wsl "chmod +x '$targetPath'"
             }
 
@@ -93,8 +96,10 @@ function Send-ToWslHome {
             # Download remote file into WSL
             Invoke-Wsl "curl -fsSL '$remoteUrl' -o '$targetPath'"
 
-            # Set execution permission if file is .sh
-            if ($targetPath -like '*.sh') {
+            if (
+                $targetPath -like '*/.local/bin*' -or
+                $targetPath.ToLower().EndsWith(".sh")
+            ) {
                 Invoke-Wsl "chmod +x '$targetPath'"
             }
 
@@ -756,12 +761,13 @@ function Set-WslZshEnvironment {
 function Send-CustomScripts {
     $localScriptsPath = "$PSScriptRoot/scripts"
     $remoteScriptsUrl = "$GITHUB_URI/scripts"
+    $targetDir = ".local/bin"
 
     Write-Host "`n - Sending custom scripts to WSL..."
 
     try {
         foreach ($script in $CUSTOM_SCRIPTS) {
-            Send-ToWslHome "$localScriptsPath/$script" "$remoteScriptsUrl/$script" ".scripts/$script"
+            Send-ToWslHome "$localScriptsPath/$script" "$remoteScriptsUrl/$script" "$targetDir/$script"
         }
     }
     catch {
