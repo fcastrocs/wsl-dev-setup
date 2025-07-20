@@ -1,0 +1,489 @@
+#!/usr/bin/env zsh
+
+# Git Identity Manager (gim)
+# Manages multiple Git identities with SSH key authentication
+
+# Prevent sourcing
+if [[ "${(%):-%N}" != "$0" ]]; then
+  echo "❌ Do not source this script — run it directly (e.g., ./gim)"
+  return 1 2>/dev/null || exit 1
+fi
+
+# Detect shell and configure nullglob behavior
+if [[ -n "$ZSH_VERSION" ]]; then
+  shell="zsh"
+  setopt NULL_GLOB
+elif [[ -n "$BASH_VERSION" ]]; then
+  shell="bash"
+  shopt -s nullglob
+else
+  echo "❌ Unsupported shell. Please use Zsh or Bash."
+  return 1 2>/dev/null || exit 1
+fi
+
+# Configuration
+GIT_IDENTITIES_DIR="$HOME/.git-identities"
+
+if [[ -z "${SSH_KEY_TYPE+x}" ]]; then
+  SSH_KEY_TYPE="ed25519"
+  readonly SSH_KEY_TYPE
+fi
+
+if [[ -z "${SSH_CONFIG_FILE+x}" ]]; then
+  SSH_CONFIG_FILE="$HOME/.ssh/config"
+  readonly SSH_CONFIG_FILE
+fi
+
+mkdir -p "$GIT_IDENTITIES_DIR" "$HOME/.ssh"
+
+# Entry point
+gim() {
+  case "$1" in
+    add)     shift; _gm_add "$@" ;;
+    switch)  shift; _gm_switch "$@" ;;
+    list)    _gm_list "$@" ;;
+    current) _gm_current ;;
+    remove)  shift; _gm_remove "$@" ;;
+    clone)   shift; _gm_clone "$@" ;;
+    help|""|*) _gm_help ;;
+  esac
+}
+
+# ----------------------------- #
+# HELPERS
+# ----------------------------- #
+
+_gm_help() {
+  cat <<EOF
+Git Identity Manager CLI
+
+Usage:
+  gim add <alias> "Full Name" "email@example.com"
+  gim switch <alias>
+  gim list
+  gim current
+  gim remove <alias | --all>
+  gim clone <alias> <git@github.com:org/repo.git> [destination] [clone flags]
+EOF
+}
+
+_gm_confirm() {
+  printf "%s (y/N): " "$1"
+  read -r yn
+  case "$yn" in
+    [Yy]) return 0 ;;
+    *)    return 1 ;;
+  esac
+}
+
+_gm_require_git_repo() {
+  git rev-parse --is-inside-work-tree > /dev/null 2>&1 || {
+    echo "Not inside a Git repository"
+    return 1
+  }
+}
+
+_gm_parse_conf() {
+  local file="$1"
+  GIT_NAME="" GIT_EMAIL="" GIT_HOST=""
+
+  while IFS='=' read -r key val; do
+    key="$(echo "$key" | tr -d '[:space:]')"
+    val="${val//\"/}"  # Remove surrounding quotes
+    case "$key" in
+      GIT_NAME)  GIT_NAME="$val" ;;
+      GIT_EMAIL) GIT_EMAIL="$val" ;;
+      GIT_HOST)  GIT_HOST="$val" ;;
+    esac
+  done < "$file"
+}
+
+# ----------------------------- #
+# ADD
+# ----------------------------- #
+
+_gm_add() {
+  if [[ $# -lt 3 ]]; then
+    echo "Usage: gim add <alias> \"Full Name\" \"email@example.com\""
+    return 1
+  fi
+
+  local alias="$1" name="$2" email="$3"
+  local keyfile="$HOME/.ssh/id_${SSH_KEY_TYPE}_gitmanager_$alias"
+  local host="github-$alias"
+  local conf_file="$GIT_IDENTITIES_DIR/$alias.conf"
+
+  # Use POSIX-compatible regex checks via case statements
+  case "$alias" in
+    (*[!a-zA-Z0-9_-]*|'') 
+      echo "Alias must contain only letters, numbers, dashes, or underscores"
+      return 1
+      ;;
+  esac
+
+  case "$email" in
+    *@*.*) ;;  # crude but acceptable for CLI input
+    *) echo "Invalid email format"; return 1 ;;
+  esac
+
+  if [[ -e "$conf_file" ]]; then
+    echo "Identity '$alias' already exists"
+    return 1
+  fi
+
+  if [[ -f "$keyfile" ]]; then
+    _gm_confirm "SSH key already exists for '$alias'. Overwrite?" || return 1
+  fi
+
+  ssh-keygen -t "$SSH_KEY_TYPE" -C "$email" -f "$keyfile" -N "" > /dev/null || {
+    echo "Failed to generate SSH key"
+    return 1
+  }
+
+  cat > "$conf_file" <<EOF
+GIT_NAME="$name"
+GIT_EMAIL="$email"
+GIT_HOST="$host"
+EOF
+
+  _gm_update_ssh_config "$host" "$keyfile"
+
+  echo "Identity created: $alias"
+  echo "Name   : $name"
+  echo "Email  : $email"
+  echo ""
+  echo "Public SSH Key:"
+  cat "${keyfile}.pub"
+  echo ""
+  echo "Add this key to GitHub: https://github.com/settings/keys"
+}
+
+
+_gm_update_ssh_config() {
+  local host="$1"
+  local keyfile="$2"
+
+  if grep -q "Host $host" "$SSH_CONFIG_FILE" 2>/dev/null; then
+    awk '
+      BEGIN { skip = 0 }
+      /^Host '"$host"'$/ { skip = 1; next }
+      /^Host / && skip { skip = 0 }
+      !skip
+    ' "$SSH_CONFIG_FILE" > "$SSH_CONFIG_FILE.tmp" && mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
+  fi
+
+  cat >> "$SSH_CONFIG_FILE" <<EOF
+
+Host $host
+    HostName github.com
+    User git
+    IdentityFile $keyfile
+    IdentitiesOnly yes
+EOF
+
+  chmod 600 "$SSH_CONFIG_FILE"
+}
+
+
+# ----------------------------- #
+# LIST
+# ----------------------------- #
+
+_gm_list() {
+  # Disable job control notifications in Zsh (prevents [%n] messages)
+  set +m
+
+  local show_keys=0
+  for arg in "$@"; do
+    case "$arg" in
+      -k|--keys) show_keys=1 ;;
+    esac
+  done
+
+  local files=("$GIT_IDENTITIES_DIR"/*.conf)
+  [[ ${#files[@]} -eq 0 ]] && {
+    echo "🚫 No identities found"
+    echo "💡 Use 'gim add' to create one"
+    return
+  }
+
+  echo "🩺 Git Identity Manager Health Check"
+  echo "═════════════════════════════════════"
+
+  local tmpdir pids identities
+  tmpdir="$(mktemp -d)"
+  pids=()
+  identities=()
+
+  for file in "${files[@]}"; do
+    [[ -f "$file" ]] || continue
+    local identity_name="${file##*/}"
+    identity_name="${identity_name%.conf}"
+    identities+=("$identity_name")
+
+    {
+      _gm_parse_conf "$file"
+      local status_ok=1
+      local keyfile="$HOME/.ssh/id_${SSH_KEY_TYPE}_gitmanager_$identity_name"
+      local pubkeyfile="${keyfile}.pub"
+
+      echo ""
+      echo "󰛿 Identity: $identity_name"
+      echo "   Name      : $GIT_NAME"
+      echo "   Email     : $GIT_EMAIL"
+      echo "   SSH Host  : $GIT_HOST"
+
+      if [[ -f "$keyfile" ]]; then
+        echo "   SSH Key   : ✅ Present"
+      else
+        echo "   SSH Key   : ❌ Missing"
+        status_ok=0
+      fi
+
+      if grep -q "Host $GIT_HOST" "$SSH_CONFIG_FILE" 2>/dev/null; then
+        echo "   SSH Config: ✅ Present"
+      else
+        echo "   SSH Config: ❌ Missing"
+        status_ok=0
+      fi
+
+      echo -n "   Connection: "
+      if [[ -f "$keyfile" && -n "$GIT_HOST" ]]; then
+        local ssh_output
+        ssh_output=$(ssh -T -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no "$GIT_HOST" 2>&1)
+        if echo "$ssh_output" | grep -qE "successfully authenticated|Hi "; then
+          echo "✅ Connected"
+        else
+          echo "❌ SSH failed"
+          status_ok=0
+        fi
+      else
+        echo "⚠️ Skipped (missing key/config)"
+        status_ok=0
+      fi
+
+      if [[ $show_keys -eq 1 && -f "$pubkeyfile" ]]; then
+        echo "   Public Key:"
+        sed 's/^/     /' "$pubkeyfile"
+      fi
+
+      echo "$status_ok" > "$tmpdir/$identity_name.status"
+    } > "$tmpdir/$identity_name.out" &
+
+    pids+=($!)
+  done
+
+  for pid in "${pids[@]}"; do wait "$pid"; done
+
+  local has_issues=0
+  for identity in "${identities[@]}"; do
+    cat "$tmpdir/$identity.out"
+    if [[ "$(cat "$tmpdir/$identity.status")" -ne 1 ]]; then
+      has_issues=1
+    fi
+  done
+
+  echo ""
+  if [[ $has_issues -eq 0 ]]; then
+    echo "✅ All identities are healthy!"
+  else
+    echo "⚠️  Some identities have issues."
+    echo "💡 Suggestions:"
+    echo "   - Add SSH key to GitHub"
+    echo "   - Run 'gim remove <alias>' and recreate"
+  fi
+
+  rm -rf "$tmpdir"
+}
+
+
+# ----------------------------- #
+# REMOVE
+# ----------------------------- #
+
+_gm_remove() {
+  local alias="$1"
+  [[ -z "$alias" ]] && { echo "Usage: gim remove <alias | --all>"; return 1; }
+
+  if [[ "$alias" == "--all" ]]; then
+    _gm_confirm "Are you sure you want to remove ALL identities?" || return 1
+
+    rm -f "$GIT_IDENTITIES_DIR"/*.conf
+    rm -f "$HOME/.ssh"/id_*_gitmanager_* "$HOME/.ssh"/id_*_gitmanager_*.pub
+
+    awk '!/^Host github-/{print}' "$SSH_CONFIG_FILE" > "$SSH_CONFIG_FILE.tmp"
+    mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
+
+    echo "All identities removed"
+    return 0
+  fi
+
+  local conf="$GIT_IDENTITIES_DIR/$alias.conf"
+  local keys=(
+    "$HOME/.ssh"/id_*_gitmanager_"$alias"
+    "$HOME/.ssh"/id_*_gitmanager_"$alias".pub
+  )
+  local host="github-$alias"
+  local did=0
+
+  if [[ -f "$conf" ]]; then
+    rm "$conf"
+    echo "Removed config"
+    did=1
+  fi
+
+  # Filter out non-existent files
+  keys=("${(@f)$(for f in "${keys[@]}"; do [[ -f "$f" ]] && echo "$f"; done)}")
+
+  if [[ ${#keys[@]} -gt 0 ]]; then
+    rm -f "${keys[@]}"
+    echo "Removed SSH keys"
+    did=1
+  fi
+
+  if grep -q "Host $host" "$SSH_CONFIG_FILE" 2>/dev/null; then
+    awk '
+      BEGIN { skip=0 }
+      /^Host '"$host"'$/ { skip=1; next }
+      /^Host / && skip { skip=0 }
+      !skip
+    ' "$SSH_CONFIG_FILE" > "$SSH_CONFIG_FILE.tmp"
+    mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
+    echo "Removed SSH config"
+    did=1
+  fi
+
+  if [[ $did -eq 0 ]]; then
+    echo "No identity found for '$alias'"
+    return 1
+  fi
+}
+
+# ----------------------------- #
+# CLONE
+# ----------------------------- #
+
+_gm_clone() {
+  if [[ $# -lt 2 ]]; then
+    echo "Usage: gim clone <alias> <git@github.com:org/repo.git> [dest] [flags]"
+    return 1
+  fi
+
+  local alias="$1"; shift
+  local url="$1"; shift
+  local conf="$GIT_IDENTITIES_DIR/$alias.conf"
+
+  if [[ ! -f "$conf" ]]; then
+    echo "Identity '$alias' not found"
+    return 1
+  fi
+
+  _gm_parse_conf "$conf"
+
+  case "$url" in
+    git@github.com:*) ;;
+    *) 
+      echo "Only SSH URLs like git@github.com:org/repo.git are supported"
+      return 1
+      ;;
+  esac
+
+  local repo dest
+  repo="${url##*/}"         # strip everything before last slash
+  repo="${repo%.git}"       # remove .git suffix
+  dest="$repo"
+
+  if [[ -n "$1" && "$1" != -* ]]; then
+    dest="$1"
+    shift
+  fi
+
+  local newurl="git@${GIT_HOST}:${url#*:}"
+
+  echo "Cloning with identity '$alias' into '$dest'..."
+  echo "Original URL : $url"
+  echo "Identity URL : $newurl"
+
+  if ! git clone "$newurl" "$dest" "$@"; then
+    echo "❌ Clone failed"
+    return 1
+  fi
+
+  if cd "$dest"; then
+    gim switch "$alias"
+    echo "✅ Repository cloned and identity set"
+  else
+    echo "❌ Failed to enter directory: $dest"
+    return 1
+  fi
+}
+
+# ----------------------------- #
+# CURRENT
+# ----------------------------- #
+
+_gm_current() {
+  _gm_require_git_repo || return 1
+
+  local name email alias
+  name=$(git config user.name 2>/dev/null)
+  email=$(git config user.email 2>/dev/null)
+  alias=""
+
+  for file in "$GIT_IDENTITIES_DIR"/*.conf; do
+    [[ -f "$file" ]] || continue  # skip if glob didn't match anything
+    _gm_parse_conf "$file"
+    if [[ "$name" == "$GIT_NAME" && "$email" == "$GIT_EMAIL" ]]; then
+      local filename="${file##*/}"
+      alias="${filename%.conf}"
+      break
+    fi
+  done
+
+  echo "Current Git Identity:"
+  echo "  Name : ${name:-<not set>}"
+  echo "  Email: ${email:-<not set>}"
+  echo "  Alias: ${alias:- (unknown or unmanaged)}"
+  echo ""
+  echo "Git Remotes:"
+  git remote -v
+}
+
+
+# ----------------------------- #
+# SWITCH
+# ----------------------------- #
+
+_gm_switch() {
+  local alias="$1"
+  [[ -z "$alias" ]] && { echo "Usage: gim switch <alias>"; return 1; }
+
+  local file="$GIT_IDENTITIES_DIR/$alias.conf"
+  [[ ! -f "$file" ]] && { echo "Identity '$alias' not found"; return 1; }
+
+  _gm_require_git_repo || return 1
+  _gm_parse_conf "$file"
+
+  git config user.name "$GIT_NAME"
+  git config user.email "$GIT_EMAIL"
+  echo "Git identity set: $GIT_NAME <$GIT_EMAIL>"
+
+  local updated=0
+  local remote url newurl
+
+  while read -r remote; do
+    url=$(git remote get-url "$remote" 2>/dev/null)
+    if [[ "$url" == git@*:* ]]; then
+      newurl="git@${GIT_HOST}:${url#*:}"
+      git remote set-url "$remote" "$newurl"
+      echo "Updated remote '$remote' to use $GIT_HOST"
+      updated=$((updated + 1))
+    fi
+  done < <(git remote)
+
+  if [[ $updated -eq 0 ]]; then
+    echo "No SSH remotes found to update"
+  fi
+}
+
+gim "$@"
