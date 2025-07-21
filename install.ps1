@@ -1,5 +1,10 @@
+param (
+    [switch]$newInstance,
+    [string]$distroName,
+	[switch]$default
+)
+
 # Constants
-$DISTRO = "Ubuntu"
 $LINUX_USER = "devuser"
 $GITHUB_URI = "https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main"
 
@@ -27,6 +32,14 @@ $CUSTOM_SCRIPTS = @(
     "gim"
 )
 
+$DISTRO_NAME = if ($distroName) {
+    $distroName
+} elseif ($newInstance) {
+    "Ubuntu-24-04-$(Get-Date -Format 'MMddyyyy-HHmm')"
+} else {
+    "Ubuntu"
+}
+
 # Run a command in WSL as $LINUX_USER
 function Invoke-Wsl {
     param (
@@ -39,7 +52,7 @@ function Invoke-Wsl {
     $bashCommand = "`"$Command`""
 
     $wslArgs = @(
-        '-d', $DISTRO,
+        '-d', $DISTRO_NAME,
         '-u', $LINUX_USER,
         '--', 'bash', '-c', $bashCommand
     )
@@ -148,7 +161,7 @@ function Install-ChocoPackage {
     }
 }
 
-function Get-WingetPath {
+function GetWingetPath {
     $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
     if (Test-Path $wingetPath) {
         return $wingetPath
@@ -243,32 +256,72 @@ function Enable-WSLFeatures {
     }
 }
 
-function Install-WSLKernel {
+function Update-WSLKernel {
     Write-Host "`n - Updating WSL kernel..."
 
     $output = & wsl --update 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "Install-WSLKernel failed (exit code $LASTEXITCODE): $output"
+        throw "Update-WSLKernel failed (exit code $LASTEXITCODE): $output"
     }
 }
 
-function Install-Distro {
-    Write-Host "`n - Installing $DISTRO..."
+function Test-WslDistroExists {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$DistroName
+    )
 
-    # Check if distro is already installed
-    $distroInstalled = wsl -l -q 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $DISTRO }
-
-    if (-not $distroInstalled) {
-        $output = & wsl --install -d $DISTRO --no-launch 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "$DISTRO installation failed (exit code $LASTEXITCODE): $output"
-        }
+    try {
+        $existingDistros = & wsl -l -q 2>&1 | ForEach-Object { $_.Trim() }
+        return $existingDistros | Where-Object { $_.ToLower() -eq $DistroName.ToLower() } | Measure-Object | Select-Object -ExpandProperty Count
     }
+    catch {
+        throw "Test-WslDistroExists failed: $($_.Exception.Message)"
+    }
+}
 
-    # Validate distro initializes
-    $output = & wsl -d $DISTRO -- echo "$DISTRO initialized" 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "$DISTRO failed to initialize (exit code $LASTEXITCODE): $output"
+function Install-UbuntuWslInstance {
+    $downloadDir    = "$env:TEMP\UbuntuWSL"
+    $installBaseDir = "C:\WSL"
+    $installDir     = Join-Path $installBaseDir $DISTRO_NAME
+    $tarballName    = "ubuntu-noble-wsl-amd64-24.04lts.rootfs.tar.gz"
+    $downloadUrl    = "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/$tarballName"
+    $tarballPath    = Join-Path $downloadDir $tarballName
+
+    try {
+        Write-Host "`n - Installing WSL distro: $DISTRO_NAME"
+		
+		if ((Test-WslDistroExists -DistroName $DISTRO_NAME) -and -not $newInstance) {
+			Write-Host "`tDistro '$DISTRO_NAME' already exists. Skipping." -ForegroundColor DarkGray
+			return
+		}
+
+        # Ensure necessary directories exist
+        New-Item -Path $downloadDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+        New-Item -Path $installDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+
+        # Download rootfs if not already present
+        if (-not (Test-Path $tarballPath)) {
+            Write-Host "`tDownloading '$tarballName'..." -ForegroundColor DarkGray
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $tarballPath -UseBasicParsing -ErrorAction Stop
+        }
+
+        # Import new WSL distro
+        Write-Host "`tImporting distro as '$DISTRO_NAME'..." -ForegroundColor DarkGray
+		$result = & wsl --import $DISTRO_NAME $installDir $tarballPath --version 2 2>&1
+		if ($LASTEXITCODE -ne 0) {
+			throw "WSL import failed with exit code $LASTEXITCODE`: $result"
+		}
+		
+		# Set as default if -default was passed
+		if ($default) {
+			Write-Host "`tSetting '$DISTRO_NAME' as the default WSL distro..." -ForegroundColor DarkGray
+			& wsl --set-default $DISTRO_NAME
+		}
+    }
+    catch {
+        throw "Install-UbuntuWslInstance failed: $($_.Exception.Message)"
     }
 }
 
@@ -276,7 +329,7 @@ function Add-LinuxUserWithSudo {
     Write-Host "`n - Creating user '$LINUX_USER' with passwordless sudo..."
 
     # Check if user exists
-    $userExists = & wsl -d $DISTRO -- bash -c "id -u $LINUX_USER >/dev/null 2>&1 && echo yes || echo no" 2>&1 |
+    $userExists = & wsl -d $DISTRO_NAME -- bash -c "id -u $LINUX_USER >/dev/null 2>&1 && echo yes || echo no" 2>&1 |
         ForEach-Object { $_.Trim() }
 
     $cmd = if ($userExists -eq "yes") {
@@ -294,45 +347,24 @@ function Add-LinuxUserWithSudo {
         ) -join "; "
     }
 
-    $output = & wsl -d $DISTRO -- bash -c "`"$cmd`"" 2>&1
+    $output = & wsl -d $DISTRO_NAME -- bash -c "`"$cmd`"" 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to create/configure user '$LINUX_USER' (exit code $LASTEXITCODE): $output"
     }
 
     # Validate passwordless sudo
-    $output = & wsl -d $DISTRO -- sudo -n true 2>&1
+    $output = & wsl -d $DISTRO_NAME -- sudo -n true 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Passwordless sudo failed for '$LINUX_USER': $output"
     }
-}
-
-function Set-DefaultWSLUser {
-    Write-Host "`n - Setting '$LINUX_USER' as default WSL user..."
-
-    $lxssPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
-
-    try {
-        $guid = (Get-ItemProperty "$lxssPath\*" |
-                 Where-Object { $_.DistributionName -eq $DISTRO }).PSChildName
-
-        if (-not $guid) {
-            throw "$DISTRO not found in registry under $lxssPath"
-        }
-
-        $uid = & wsl -d $DISTRO -- bash -c "id -u $LINUX_USER" 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to get UID for '$LINUX_USER' (exit $LASTEXITCODE): $uid"
-        }
-
-        $uid = $uid.Trim()
-        if (-not ($uid -match '^\d+$')) {
-            throw "UID '$uid' for user '$LINUX_USER' is invalid"
-        }
-
-        Set-ItemProperty -Path "$lxssPath\$guid" -Name DefaultUid -Value ([int]$uid) -ErrorAction Stop
-    }
-    catch {
-        throw "Set-DefaultWSLUser failed: $($_.Exception.Message)"
+	
+	# Set as default user via /etc/wsl.conf (for imported distros)
+    $confCmd = @"
+echo -e '[user]\ndefault=$LINUX_USER' | sudo tee /etc/wsl.conf > /dev/null
+"@
+    $output = & wsl -d $DISTRO_NAME -- bash -c "$confCmd" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to set default user in wsl.conf: $output"
     }
 }
 
@@ -708,9 +740,9 @@ function Set-WindowsTerminalSettings {
         $json.profiles.defaults.font.face = $FONT_NAME
         $json.profiles.defaults.colorScheme = $TERMINAL_COLOR_SCHEME
 
-        # Set defaultProfile to $DISTRO if found
+        # Set defaultProfile to $DISTRO_NAME if found
         $ubuntu = $json.profiles.list | Where-Object {
-            $_.name -eq $DISTRO -or ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO*")
+            $_.name -eq $DISTRO_NAME -or ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO_NAME*")
         } | Select-Object -First 1
 
         if ($ubuntu -and $ubuntu.guid) {
@@ -791,10 +823,9 @@ try {
 
     # Install and setup WSL
     Enable-WSLFeatures
-    Install-WSLKernel
-    Install-Distro
+    Update-WSLKernel
+    Install-UbuntuWslInstance
     Add-LinuxUserWithSudo
-    Set-DefaultWSLUser
     Write-WSLConfig
     Set-WslZshEnvironment
     Send-CustomScripts
