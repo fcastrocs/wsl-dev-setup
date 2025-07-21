@@ -772,13 +772,6 @@ function Get-WindowsTerminalSettingsPath {
     return $null
 }
 
-function Remove-WindowsTerminalSettings {
-    $settingsPath = Get-WindowsTerminalSettingsPath
-    if ($settingsPath) {
-        Remove-Item -Path $settingsPath -Force
-    }
-}
-
 function Set-WslZshEnvironment {
     $localConfigPath = "$PSScriptRoot/configs"
     $remoteZshrcUrl = "$GITHUB_URI/configs/.zshrc"
@@ -836,11 +829,10 @@ try {
     foreach ($package in $WINGET_PACKAGES) {
         Install-WingetPackage -PackageName $package
     }
-    # Install-Chocolatey
+
     Install-NerdFontFiraCode
 
     # Configure Windows Terminal and editors with FiraCode font
-    Remove-WindowsTerminalSettings
     Open-AppsForFirstTime
     Set-FiraCodeFontInEditors
     Set-WindowsTerminalSettings
