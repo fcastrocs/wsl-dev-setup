@@ -235,6 +235,28 @@ fi
 
 echo 'export ZDOTDIR="$HOME/.config/zsh"' > ~/.zshenv
 
+
+# ------------------------------------------------------------------------------------------------
+# Disable unnecessary services
+# ------------------------------------------------------------------------------------------------
+echo "\tDisabling and stopping unnecessary WSL services..."
+
+SERVICES=(
+  landscape-client.service
+  snapd.service
+  snapd.seeded.service
+  snapd.socket
+  cron.service
+  systemd-resolved.service
+  systemd-timesyncd.service
+  rsyslog.service
+)
+
+for svc in "${SERVICES[@]}"; do
+  sudo systemctl disable "$svc" >/dev/null 2>&1
+  sudo systemctl stop "$svc" >/dev/null 2>&1
+done
+
 # ------------------------------------------------------------------------------------------------
 # Clean up
 # ------------------------------------------------------------------------------------------------
