@@ -707,11 +707,10 @@ function Set-FiraCodeFontInEditors {
     }
 }
 
-function Set-WindowsTerminalSettings {
-    Write-Host "`n - Setting Windows Terminal settings..."
+function Set-WindowsTerminalAppearance {
+    Write-Host "`n - Applying Windows Terminal appearance settings..."
 
     $settingsPath = Get-WindowsTerminalSettingsPath
-
     if (-not $settingsPath) {
         Write-Host "`tWindows Terminal settings.json not found. Skipping." -ForegroundColor DarkGray
         return
@@ -720,15 +719,12 @@ function Set-WindowsTerminalSettings {
     try {
         $json = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction Stop
 
-        # Ensure profiles and defaults exist
         if (-not $json.profiles) {
             $json | Add-Member -MemberType NoteProperty -Name profiles -Value @{ defaults = @{} }
-        }
-        elseif (-not $json.profiles.defaults) {
+        } elseif (-not $json.profiles.defaults) {
             $json.profiles | Add-Member -MemberType NoteProperty -Name defaults -Value @{}
         }
 
-        # Set font and color scheme safely
         if (-not $json.profiles.defaults.PSObject.Properties["font"]) {
             $json.profiles.defaults | Add-Member -MemberType NoteProperty -Name font -Value @{}
         }
@@ -740,19 +736,58 @@ function Set-WindowsTerminalSettings {
         $json.profiles.defaults.font.face = $FONT_NAME
         $json.profiles.defaults.colorScheme = $TERMINAL_COLOR_SCHEME
 
-        # Set defaultProfile to $DISTRO_NAME if found
-        $ubuntu = $json.profiles.list | Where-Object {
-            $_.name -eq $DISTRO_NAME -or ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO_NAME*")
-        } | Select-Object -First 1
-
-        if ($ubuntu -and $ubuntu.guid) {
-            $json.defaultProfile = $ubuntu.guid.ToString()
-        }
-
         $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $settingsPath -ErrorAction Stop
     }
     catch {
-        throw "Set-WindowsTerminalSettings failed: $($_.Exception.Message)"
+        throw "Set-WindowsTerminalAppearance failed: $($_.Exception.Message)"
+    }
+}
+
+function Set-WindowsTerminalDefaultProfile {
+    Write-Host "`n - Setting Windows Terminal default profile..."
+
+    # Get the path to settings.json
+    $settingsPath = Get-WindowsTerminalSettingsPath
+    if (-not $settingsPath) {
+        Write-Host "`tWindows Terminal settings.json not found. Skipping." -ForegroundColor DarkGray
+        return
+    }
+
+    try {
+        # Load and parse the JSON settings file
+        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction Stop
+
+        # Extract a list of all valid profile GUIDs from the settings
+        $validGuids = @()
+        if ($json.profiles.list) {
+            $validGuids = $json.profiles.list | ForEach-Object { $_.guid.ToString() }
+        }
+
+        # Check current defaultProfile value (if any)
+        $currentDefault = $json.defaultProfile
+        $isValidDefault = $currentDefault -and ($validGuids -contains $currentDefault)
+
+        # If defaultProfile is not valid OR --default was explicitly passed
+        if (-not $isValidDefault -or $default) {
+            $ubuntu = $json.profiles.list | Where-Object {
+                $_.name -eq $DISTRO_NAME -or ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO_NAME*")
+            } | Select-Object -First 1
+
+            if ($ubuntu -and $ubuntu.guid) {
+                $json.defaultProfile = $ubuntu.guid.ToString()
+                Write-Host "`tDefault profile set to '$DISTRO_NAME'" -ForegroundColor DarkGray
+            } else {
+                Write-Host "`tCould not find matching WSL profile for '$DISTRO_NAME'" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "`tDefault profile already set and valid. Skipping." -ForegroundColor DarkGray
+        }
+
+        # Save the updated settings back to disk
+        $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $settingsPath -ErrorAction Stop
+    }
+    catch {
+        throw "Set-WindowsTerminalDefaultProfile failed: $($_.Exception.Message)"
     }
 }
 
@@ -835,7 +870,8 @@ try {
     # Configure Windows Terminal and editors with FiraCode font
     Open-AppsForFirstTime
     Set-FiraCodeFontInEditors
-    Set-WindowsTerminalSettings
+    Set-WindowsTerminalAppearance
+    Set-WindowsTerminalDefaultProfile
 
     Write-Host "`nWSL Full Developer Setup Complete." -ForegroundColor Green
 } catch {
