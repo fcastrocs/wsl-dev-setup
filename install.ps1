@@ -170,6 +170,15 @@ function GetWingetPath {
     }
 }
 
+function Get-WingetPath {
+    $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+    if (Test-Path $wingetPath) {
+        return $wingetPath
+    } else {
+        throw "winget.exe not found in the expected location."
+    }
+}
+
 function Ensure-WinGetReady {
     Write-Host "`n - Ensuring WinGet is ready..."
 
