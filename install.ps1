@@ -357,18 +357,31 @@ function Add-LinuxUserWithSudo {
     if ($LASTEXITCODE -ne 0) {
         throw "Passwordless sudo failed for '$LINUX_USER': $output"
     }
-    
-    # Set as default user via /etc/wsl.conf (for imported distros)
-    $confCmd = @"
-echo -e '[user]\ndefault=$LINUX_USER' | sudo tee /etc/wsl.conf > /dev/null
+}
+
+function Write-WslConfigOnWsl {
+    # Set as default user via /etc/wsl.conf and enable systemd
+    $wslConfContent = @"
+[user]
+default=$LINUX_USER
+
+[systemd]
+enabled=true
 "@
+
+    # Command to write the config content to /etc/wsl.conf inside WSL
+    $confCmd = "echo -e '$wslConfContent' | sudo tee /etc/wsl.conf > /dev/null"
+
+    # Execute the command in the specified WSL distro
     $output = & wsl -d $DISTRO_NAME -- bash -c "$confCmd" 2>&1
+
+    # Check for errors
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to set default user in wsl.conf: $output"
+        throw "Write-WslConfigOnWsl failed: $output"
     }
 }
 
-function Write-WSLConfig {
+function Write-WslConfigOnWindows {
     Write-Host "`n - Writing .wslconfig with performance optimizations..."
 
     $configPath = "$env:USERPROFILE\.wslconfig"
@@ -409,17 +422,19 @@ function Invoke-WSLSetupScript {
 
     Write-Host "`n - Installing developer tools in WSL..."
 
+    wsl --shutdown *> $null
+
     try {
         Send-ToWslHome $localScriptPath $remoteScriptUrl "$scriptFileName"
 
         # Execute setup script
         Invoke-Wsl "/home/$LINUX_USER/$scriptFileName" -Passthru
-
-        # Shutdown WSL to finalize configuration
-        wsl --shutdown *> $null
     }
     catch {
         throw "Invoke-WSLSetupScript failed: $($_.Exception.Message)"
+    }
+    finally {
+        wsl --shutdown *> $null
     }
 }
 
@@ -853,7 +868,8 @@ try {
     Update-WSLKernel
     Install-UbuntuWslInstance
     Add-LinuxUserWithSudo
-    Write-WSLConfig
+    Write-WslConfigOnWsl
+    Write-WslConfigOnWindows
     Set-WslZshEnvironment
     Send-CustomScripts
     Invoke-WSLSetupScript
