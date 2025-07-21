@@ -1,7 +1,7 @@
 param (
     [switch]$newInstance,
     [string]$distroName,
-	[switch]$default
+    [switch]$default
 )
 
 # Constants
@@ -290,11 +290,11 @@ function Install-UbuntuWslInstance {
 
     try {
         Write-Host "`n - Installing WSL distro: $DISTRO_NAME"
-		
-		if ((Test-WslDistroExists -DistroName $DISTRO_NAME) -and -not $newInstance) {
-			Write-Host "`tDistro '$DISTRO_NAME' already exists. Skipping." -ForegroundColor DarkGray
-			return
-		}
+        
+        if ((Test-WslDistroExists -DistroName $DISTRO_NAME) -and -not $newInstance) {
+            Write-Host "`tDistro '$DISTRO_NAME' already exists. Skipping." -ForegroundColor DarkGray
+            return
+        }
 
         # Ensure necessary directories exist
         New-Item -Path $downloadDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
@@ -309,16 +309,16 @@ function Install-UbuntuWslInstance {
 
         # Import new WSL distro
         Write-Host "`tImporting distro as '$DISTRO_NAME'..." -ForegroundColor DarkGray
-		$result = & wsl --import $DISTRO_NAME $installDir $tarballPath --version 2 2>&1
-		if ($LASTEXITCODE -ne 0) {
-			throw "WSL import failed with exit code $LASTEXITCODE`: $result"
-		}
-		
-		# Set as default if -default was passed
-		if ($default) {
-			Write-Host "`tSetting '$DISTRO_NAME' as the default WSL distro..." -ForegroundColor DarkGray
-			& wsl --set-default $DISTRO_NAME
-		}
+        $result = & wsl --import $DISTRO_NAME $installDir $tarballPath --version 2 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "WSL import failed with exit code $LASTEXITCODE`: $result"
+        }
+        
+        # Set as default if -default was passed
+        if ($default) {
+            Write-Host "`tSetting '$DISTRO_NAME' as the default WSL distro..." -ForegroundColor DarkGray
+            & wsl --set-default $DISTRO_NAME
+        }
     }
     catch {
         throw "Install-UbuntuWslInstance failed: $($_.Exception.Message)"
@@ -357,8 +357,8 @@ function Add-LinuxUserWithSudo {
     if ($LASTEXITCODE -ne 0) {
         throw "Passwordless sudo failed for '$LINUX_USER': $output"
     }
-	
-	# Set as default user via /etc/wsl.conf (for imported distros)
+    
+    # Set as default user via /etc/wsl.conf (for imported distros)
     $confCmd = @"
 echo -e '[user]\ndefault=$LINUX_USER' | sudo tee /etc/wsl.conf > /dev/null
 "@
@@ -594,7 +594,6 @@ function Open-AppsForFirstTime {
                 if ($alreadyRunning) {
                     return
                 }
-
 
                 Start-Process -FilePath $app.exe -WindowStyle Minimized
 
