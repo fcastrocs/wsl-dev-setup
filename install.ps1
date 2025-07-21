@@ -779,12 +779,20 @@ function Set-WindowsTerminalDefaultProfile {
 
         # Check current defaultProfile value (if any)
         $currentDefault = $json.defaultProfile
-        $isValidDefault = $currentDefault -and ($validGuids -contains $currentDefault)
+
+        # Validate the default profile is Ubuntu
+        $currentDefaultProfile = $json.profiles.list | Where-Object { $_.guid -eq $currentDefault }
+        $isValidDefault = $currentDefaultProfile -and
+                          ($validGuids -contains $currentDefault) -and
+                          ($currentDefaultProfile.name -like 'Ubuntu*')
 
         # If defaultProfile is not valid OR --default was explicitly passed
         if (-not $isValidDefault -or $default) {
             $ubuntu = $json.profiles.list | Where-Object {
-                $_.name -eq $DISTRO_NAME -or ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO_NAME*")
+                $_.name -like 'Ubuntu*' -and (
+                    $_.name -eq $DISTRO_NAME -or
+                    ($_.source -like "*WSL*" -and $_.name -like "*$DISTRO_NAME*")
+                )
             } | Select-Object -First 1
 
             if ($ubuntu -and $ubuntu.guid) {
@@ -804,6 +812,7 @@ function Set-WindowsTerminalDefaultProfile {
         throw "Set-WindowsTerminalDefaultProfile failed: $($_.Exception.Message)"
     }
 }
+
 
 function Get-WindowsTerminalSettingsPath {
     $possiblePaths = @(
