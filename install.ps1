@@ -161,15 +161,6 @@ function Install-ChocoPackage {
     }
 }
 
-function GetWingetPath {
-    $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-    if (Test-Path $wingetPath) {
-        return $wingetPath
-    } else {
-        throw "winget.exe not found in the expected location."
-    }
-}
-
 function Get-WingetPath {
     $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
     if (Test-Path $wingetPath) {
@@ -187,7 +178,7 @@ function Ensure-WinGetReady {
         Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery -ErrorAction Stop | Out-Null
         Repair-WinGetPackageManager -AllUsers
     } catch {
-        throw"Ensure-WinGetReady failed: $_"
+        throw"Ensure-WinGetReady failed: $($_.Exception.Message)"
     }
 }
 
@@ -245,19 +236,19 @@ function Enable-WSLFeatures {
     }
 
     # Enable Microsoft-Windows-Subsystem-Linux
-    & $dismPath /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart *> $null
+    $output = & $dismPath /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart 2>&1
     if ($LASTEXITCODE -eq 3010) {
         $restartRequired = $true
     } elseif ($LASTEXITCODE -ne 0) {
-        throw "Failed to enable Microsoft-Windows-Subsystem-Linux (exit code $LASTEXITCODE)"
+        throw "Failed to enable Microsoft-Windows-Subsystem-Linux (exit code $LASTEXITCODE): $output"
     }
 
     # Enable VirtualMachinePlatform
-    & $dismPath /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart *> $null
+    $output = & $dismPath /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart 2>&1
     if ($LASTEXITCODE -eq 3010) {
         $restartRequired = $true
     } elseif ($LASTEXITCODE -ne 0) {
-        throw "Failed to enable VirtualMachinePlatform (exit code $LASTEXITCODE)"
+        throw "Failed to enable VirtualMachinePlatform (exit code $LASTEXITCODE): $output"
     }
 
     if ($restartRequired) {
@@ -428,7 +419,7 @@ function Invoke-WSLSetupScript {
         wsl --shutdown *> $null
     }
     catch {
-        # throw "Invoke-WSLSetupScript failed: $($_.Exception.Message)"
+        throw "Invoke-WSLSetupScript failed: $($_.Exception.Message)"
     }
 }
 
