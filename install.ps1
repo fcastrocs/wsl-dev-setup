@@ -365,8 +365,8 @@ function Write-WslConfigOnWsl {
 [user]
 default=$LINUX_USER
 
-[systemd]
-enabled=true
+[boot]
+systemd=true
 "@
 
     # Command to write the config content to /etc/wsl.conf inside WSL
