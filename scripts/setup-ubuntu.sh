@@ -186,6 +186,12 @@ if command_exists docker; then
 	silent_run sudo systemctl start docker
 fi
 
+# Load NVM, install the latest LTS version of Node.js, and set it as the default
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+silent_run nvm install --lts
+silent_run nvm alias default lts/*
+
 # ------------------------------------------------------------------------------------------------
 # Install Oh My Zsh and plugins
 # ------------------------------------------------------------------------------------------------
