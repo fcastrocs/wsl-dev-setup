@@ -1,0 +1,139 @@
+#!/bin/bash
+set -euo pipefail
+
+# ----------------------------------------
+# Defaults
+# ----------------------------------------
+AWS_REGION=""
+AWS_PROFILE=""
+AWS_ACCOUNT_ID=""
+
+# ----------------------------------------
+# Help
+# ----------------------------------------
+usage() {
+  cat <<EOF
+Usage: awslogin ecr [-p aws_profile] [-a aws_account_id] [-r aws_region] [-h]
+
+Options:
+  -p AWS_PROFILE      (required) AWS CLI profile name
+  -a AWS_ACCOUNT_ID   (required) AWS account ID (12 digits)
+  -r AWS_REGION       (optional) AWS region (default: us-east-1)
+  -h                  (optional) Show this help message
+
+Examples:
+  awslogin ecr -p dev -a 123456789012 -r us-west-2
+  awslogin ecr -p prod -a 123456789012
+EOF
+  exit 1
+}
+
+# ----------------------------------------
+# Parse CLI args
+# ----------------------------------------
+while getopts ":p:a:r:h" opt; do
+  case $opt in
+    p) AWS_PROFILE="$OPTARG" ;;
+    a) AWS_ACCOUNT_ID="$OPTARG" ;;
+    r) AWS_REGION="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+
+# ----------------------------------------
+# Interactive prompts only if missing
+# ----------------------------------------
+[[ -z "$AWS_PROFILE" ]] && read -rp "Enter AWS profile: " AWS_PROFILE
+[[ -z "$AWS_ACCOUNT_ID" ]] && read -rp "Enter AWS account ID: " AWS_ACCOUNT_ID
+[[ -z "$AWS_REGION" ]] && read -rp "Enter AWS region [default: us-east-1]: " AWS_REGION
+
+# Set default region
+AWS_REGION="${AWS_REGION:-us-east-1}"
+
+# ----------------------------------------
+# Validation
+# ----------------------------------------
+# Validate required parameters
+if [[ -z "$AWS_PROFILE" ]]; then
+  echo "❌ AWS profile is required"
+  exit 1
+fi
+
+if [[ -z "$AWS_ACCOUNT_ID" ]]; then
+  echo "❌ AWS account ID is required"
+  exit 1
+fi
+
+# Validate account ID format (12 digits)
+if [[ ! "$AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+  echo "❌ AWS Account ID must be exactly 12 digits"
+  exit 1
+fi
+
+# Construct ECR repository URI
+ECR_REPO_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+# ----------------------------------------
+# Docker availability check
+# ----------------------------------------
+if ! docker info >/dev/null 2>&1; then
+  echo "❌ Docker is not running or not accessible"
+  echo "   Please start Docker and try again"
+  exit 1
+fi
+
+# ----------------------------------------
+# AWS CLI availability check
+# ----------------------------------------
+if ! command -v aws >/dev/null 2>&1; then
+  echo "❌ AWS CLI is not installed or not in PATH"
+  exit 1
+fi
+
+# ----------------------------------------
+# AWS profile validation
+# ----------------------------------------
+if ! aws configure list-profiles 2>/dev/null | grep -q "^${AWS_PROFILE}$"; then
+  echo "❌ AWS profile '$AWS_PROFILE' not found"
+  echo "   Available profiles:"
+  aws configure list-profiles 2>/dev/null | sed 's/^/   - /' || echo "   (none configured)"
+  exit 1
+fi
+
+# ----------------------------------------
+# AWS login check
+# ----------------------------------------
+if ! aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null 2>&1; then
+  echo "🔐 AWS authentication required for profile '$AWS_PROFILE'"
+  if ! aws sso login --profile "$AWS_PROFILE"; then
+    echo "❌ AWS SSO login failed"
+    exit 1
+  fi
+fi
+
+# ----------------------------------------
+# Verify AWS account ID matches
+# ----------------------------------------
+ACTUAL_ACCOUNT_ID=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query 'Account' --output text 2>/dev/null)
+if [[ "$ACTUAL_ACCOUNT_ID" != "$AWS_ACCOUNT_ID" ]]; then
+  echo "❌ Account ID mismatch:"
+  echo "   Expected: $AWS_ACCOUNT_ID"
+  echo "   Actual:   $ACTUAL_ACCOUNT_ID"
+  echo "   Check your AWS profile configuration"
+  exit 1
+fi
+
+# ----------------------------------------
+# Authenticate Docker with ECR
+# ----------------------------------------
+if ! aws ecr get-login-password --region "$AWS_REGION" --profile "$AWS_PROFILE" \
+  | docker login --username AWS --password-stdin "$ECR_REPO_URI" >/dev/null 2>&1; then
+  echo "❌ Docker authentication to ECR failed"
+  exit 1
+fi
+
+# ----------------------------------------
+# Final confirmation
+# ----------------------------------------
+echo "✅ Successfully authenticated Docker to ECR registry '$ECR_REPO_URI' using AWS profile '$AWS_PROFILE'"
