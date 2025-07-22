@@ -10,7 +10,9 @@ export EDITOR="vim"
 
 # NVM (Node Version Manager)
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+# If a default Node version is set, activate it
+nvm alias default &> /dev/null && nvm use default &> /dev/null
 
 # PATH additions
 PATH_ADDITIONS=(
