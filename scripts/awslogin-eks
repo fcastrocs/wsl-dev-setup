@@ -1,0 +1,157 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# ----------------------------------------
+# Defaults
+# ----------------------------------------
+AWS_REGION=""
+AWS_PROFILE=""
+EKS_CLUSTER_NAME=""
+NAMESPACE=""
+
+# ----------------------------------------
+# Help
+# ----------------------------------------
+usage() {
+  cat <<EOF
+Usage: awslogin eks [-p aws_profile] [-c cluster_name] [-r aws_region] [-n namespace] [-h]
+
+Options:
+  -p AWS_PROFILE      (required) AWS CLI profile name
+  -c CLUSTER_NAME     (required) EKS cluster name
+  -r AWS_REGION       (optional) AWS region (default: us-east-1)
+  -n NAMESPACE        (optional) Default Kubernetes namespace
+  -h                  (optional) Show this help message
+
+Examples:
+  awslogin eks -p dev -c my-cluster -r us-west-2
+  awslogin eks -p prod -c my-cluster -n default
+EOF
+  exit 1
+}
+
+# ----------------------------------------
+# Parse CLI args
+# ----------------------------------------
+while getopts ":p:c:r:n:h" opt; do
+  case $opt in
+    p) AWS_PROFILE="$OPTARG" ;;
+    c) EKS_CLUSTER_NAME="$OPTARG" ;;
+    r) AWS_REGION="$OPTARG" ;;
+    n) NAMESPACE="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+
+# ----------------------------------------
+# Interactive prompts only if missing
+# ----------------------------------------
+[[ -z "$AWS_PROFILE" ]] && read -rp "Enter AWS profile: " AWS_PROFILE
+[[ -z "$EKS_CLUSTER_NAME" ]] && read -rp "Enter EKS cluster name: " EKS_CLUSTER_NAME
+[[ -z "$AWS_REGION" ]] && read -rp "Enter AWS region [default: us-east-1]: " AWS_REGION
+AWS_REGION="${AWS_REGION:-us-east-1}"
+[[ -z "$NAMESPACE" ]] && read -rp "Enter namespace (optional): " NAMESPACE
+
+# ----------------------------------------
+# Validation
+# ----------------------------------------
+# Validate required parameters
+if [[ -z "$AWS_PROFILE" ]]; then
+  echo "❌ AWS profile is required"
+  exit 1
+fi
+
+if [[ -z "$EKS_CLUSTER_NAME" ]]; then
+  echo "❌ EKS cluster name is required"
+  exit 1
+fi
+
+# ----------------------------------------
+# kubectl availability check
+# ----------------------------------------
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "❌ kubectl is not installed or not in PATH"
+  exit 1
+fi
+
+# ----------------------------------------
+# AWS CLI availability check
+# ----------------------------------------
+if ! command -v aws >/dev/null 2>&1; then
+  echo "❌ AWS CLI is not installed or not in PATH"
+  exit 1
+fi
+
+# ----------------------------------------
+# AWS profile validation
+# ----------------------------------------
+if ! aws configure list-profiles 2>/dev/null | grep -q "^${AWS_PROFILE}$"; then
+  echo "❌ AWS profile '$AWS_PROFILE' not found"
+  echo "   Available profiles:"
+  aws configure list-profiles 2>/dev/null | sed 's/^/   - /' || echo "   (none configured)"
+  exit 1
+fi
+
+# ----------------------------------------
+# AWS login check
+# ----------------------------------------
+if ! aws sts get-caller-identity --profile "$AWS_PROFILE" >/dev/null 2>&1; then
+  echo "🔐 AWS authentication required for profile '$AWS_PROFILE'"
+  if ! aws sso login --profile "$AWS_PROFILE"; then
+    echo "❌ AWS SSO login failed"
+    exit 1
+  fi
+fi
+
+# ----------------------------------------
+# Verify EKS cluster exists
+# ----------------------------------------
+if ! aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --profile "$AWS_PROFILE" >/dev/null 2>&1; then
+  echo "❌ EKS cluster '$EKS_CLUSTER_NAME' not found in region '$AWS_REGION'"
+  echo "   Available clusters:"
+  aws eks list-clusters --region "$AWS_REGION" --profile "$AWS_PROFILE" --query 'clusters[]' --output text 2>/dev/null | sed 's/^/   - /' || echo "   (none found)"
+  exit 1
+fi
+
+# ----------------------------------------
+# Update kubeconfig
+# ----------------------------------------
+if ! aws eks update-kubeconfig \
+  --region "$AWS_REGION" \
+  --name "$EKS_CLUSTER_NAME" \
+  --profile "$AWS_PROFILE" >/dev/null 2>&1; then
+  echo "❌ Failed to update kubeconfig"
+  exit 1
+fi
+
+# ----------------------------------------
+# Verify kubectl connection
+# ----------------------------------------
+if ! kubectl cluster-info >/dev/null 2>&1; then
+  echo "❌ Failed to connect to EKS cluster"
+  echo "   Check your AWS permissions and cluster configuration"
+  exit 1
+fi
+
+# ----------------------------------------
+# Set default namespace
+# ----------------------------------------
+if [[ -n "$NAMESPACE" ]]; then
+  # Verify namespace exists
+  if ! kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+    echo "❌ Namespace '$NAMESPACE' not found in cluster"
+    echo "   Available namespaces:"
+    kubectl get namespaces --no-headers -o custom-columns=":metadata.name" 2>/dev/null | sed 's/^/   - /' || echo "   (unable to list namespaces)"
+    exit 1
+  fi
+  
+  if ! kubectl config set-context --current --namespace "$NAMESPACE" >/dev/null 2>&1; then
+    echo "❌ Failed to set namespace context"
+    exit 1
+  fi
+  echo "✅ Successfully logged in to EKS cluster '$EKS_CLUSTER_NAME' using AWS profile '$AWS_PROFILE' in region '$AWS_REGION' with namespace '$NAMESPACE'"
+else
+  echo "✅ Successfully logged in to EKS cluster '$EKS_CLUSTER_NAME' using AWS profile '$AWS_PROFILE' in region '$AWS_REGION'"
+fi
