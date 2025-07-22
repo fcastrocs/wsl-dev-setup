@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+awslogin — Unified AWS CLI Login Tool
+
+Usage:
+  awslogin <command> [options]
+
+Commands:
+  ecr     🐳 Login to Amazon ECR (for Docker)
+  eks     ⚓ Login to Amazon EKS (for kubectl)
+  help    📖 Show this help message
+
+Examples:
+  awslogin ecr -p dev -a 123456789012 -r us-west-2
+  awslogin eks -p dev -c my-cluster -n default -r us-west-2
+  awslogin help
+
+---
+
+awslogin ecr options:
+  -p AWS_PROFILE      (required) AWS CLI profile name
+  -a AWS_ACCOUNT_ID   (required) AWS account ID
+  -r AWS_REGION       (optional) AWS region (default: us-east-1)
+
+awslogin eks options:
+  -p AWS_PROFILE      (required) AWS CLI profile name
+  -c CLUSTER_NAME     (required) EKS cluster name
+  -r AWS_REGION       (optional) AWS region (default: us-east-1)
+  -n NAMESPACE        (optional) Default Kubernetes namespace
+EOF
+  exit 1
+}
+
+# Show help if no arguments or help requested
+[[ $# -lt 1 ]] && usage
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+  ecr)
+    script="$HOME/.local/bin/awslogin-ecr"
+    [[ -x "$script" ]] || { echo "❌ $script not found or not executable"; exit 1; }
+    exec "$script" "$@"
+    ;;
+  eks)
+    script="$HOME/.local/bin/awslogin-eks"
+    [[ -x "$script" ]] || { echo "❌ $script not found or not executable"; exit 1; }
+    exec "$script" "$@"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "❌ Unknown command: $COMMAND"
+    echo ""
+    usage
+    ;;
+esac
