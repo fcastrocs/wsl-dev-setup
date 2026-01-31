@@ -62,16 +62,17 @@ silent_run sudo apt-get upgrade -y
 # Install Prerequisite Packages
 # ------------------------------------------------------------------------------------------------
 PREREQ_PACKAGES=(
-	# prerequisite packages
-	curl
-	ca-certificates
-	wget
-	gnupg
-	unzip
-	# dev packages
-	command-not-found
-	zsh
-	git
+    # --- Prerequisite packages (Required by script commands) ---
+    curl                # Required to download keys/files
+    ca-certificates     # Required by curl/wget to verify SSL/TLS for secure (https) downloads
+    wget                # Required as an alternative downloader
+    gnupg               # Required to process/dearmor the PGP keys for Docker and GitHub CLI
+    unzip               # Required to extract zips
+
+    # --- Dev packages (User experience & Configuration) ---
+    command-not-found   # Required by Zsh/Bash to suggest packages when a command is missing
+    zsh                 # Required to set the new default shell and run Oh My Zsh
+    git                 # Required to clone Oh My Zsh and its plugins (autosuggestions, etc.)
 )
 
 install_packages "${PREREQ_PACKAGES[@]}"
@@ -92,77 +93,20 @@ if ! command_exists docker; then
 		echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
 fi
 
-# Add GitHub CLI repository
-if ! command_exists gh; then
-	silent_run curl -fsSLO https://cli.github.com/packages/githubcli-archive-keyring.gpg
-	silent_run sudo install -m 644 githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
-	silent_run sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
-		sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-fi
-
-# Add Kubernetes repository for kubectl
-if ! command_exists kubectl; then
-	silent_run curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -o kubernetes-release.key
-	silent_run sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg kubernetes-release.key
-	silent_run sudo chmod go+r /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' |
-		sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
-fi
-
-# Update package lists after adding repositories
+# Install packages
 silent_run sudo apt-get update -y
 
-REPO_PACKAGES=(
+PACKAGES=(
 	docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-	gh
-	kubectl
+	unrar
+	7zip
 )
 
-install_packages "${REPO_PACKAGES[@]}"
+install_packages "${PACKAGES[@]}"
 
 # ------------------------------------------------------------------------------------------------
 # Install packages from source
 # ------------------------------------------------------------------------------------------------
-
-# Install AWS CLI v2
-if ! command_exists aws; then
-	echo -e "\tInstalling AWS CLI v2..."
-	silent_run curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-	silent_run unzip awscliv2.zip
-	silent_run sudo ./aws/install
-else
-	echo -e "\tAWS CLI v2 already installed."
-fi
-
-# Install k9s
-if ! command_exists k9s; then
-	echo -e "\tInstalling k9s..."
-	silent_run curl -fsSLO https://github.com/derailed/k9s/releases/latest/download/k9s_linux_amd64.tar.gz
-	silent_run tar -xzf k9s_linux_amd64.tar.gz
-	silent_run chmod a+x k9s
-	silent_run sudo mv k9s /usr/local/bin/
-else
-	echo -e "\tk9s already installed."
-fi
-
-# Install Telepresence
-if ! command_exists telepresence; then
-	echo -e "\tInstalling Telepresence..."
-	silent_run curl -fsSL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o telepresence
-	silent_run chmod a+x telepresence
-	silent_run sudo mv telepresence /usr/local/bin/
-else
-	echo -e "\tTelepresence already installed"
-fi
-
-# Install kubetail
-if ! command_exists kubetail; then
-	echo -e "\tInstalling kubetail..."
-	silent_run bash -c 'curl -sS https://www.kubetail.com/install.sh | bash'
-else
-	echo -e "\tkubetail already installed."
-fi
 
 # Install NVM for Node.js
 if ! command_exists nvm; then
@@ -203,12 +147,27 @@ else
 fi
 
 echo -e "\tInstalling Zsh plugins..."
-silent_run git clone https://github.com/zsh-users/zsh-autosuggestions \
-	"$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-silent_run git clone https://github.com/zsh-users/zsh-syntax-highlighting \
-	"$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
-silent_run git clone https://github.com/zsh-users/zsh-completions \
-	"$HOME/.oh-my-zsh/custom/plugins/zsh-completions"
+
+# Define the custom plugins directory for cleaner code
+ZSH_CUSTOM="$HOME/.oh-my-zsh/custom"
+
+echo -e "\tInstalling Zsh plugins..."
+
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
+    silent_run git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
+fi
+
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
+    silent_run git clone https://github.com/zsh-users/zsh-syntax-highlighting "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
+fi
+
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-completions" ]; then
+    silent_run git clone https://github.com/zsh-users/zsh-completions "$ZSH_CUSTOM/plugins/zsh-completions"
+fi
+
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-nvm" ]; then
+    silent_run git clone https://github.com/lukechilds/zsh-nvm "$ZSH_CUSTOM/plugins/zsh-nvm"
+fi
 
 # ------------------------------------------------------------------------------------------------
 # Install Starship Prompt
@@ -241,35 +200,15 @@ fi
 
 echo 'export ZDOTDIR="$HOME/.config/zsh"' > ~/.zshenv
 
-
-# ------------------------------------------------------------------------------------------------
-# Disable unnecessary services
-# ------------------------------------------------------------------------------------------------
-echo "\tDisabling and stopping unnecessary WSL services..."
-
-SERVICES=(
-  landscape-client.service
-  snapd.service
-  snapd.seeded.service
-  snapd.socket
-  cron.service
-  systemd-resolved.service
-  systemd-timesyncd.service
-  rsyslog.service
-)
-
-for svc in "${SERVICES[@]}"; do
-  sudo systemctl disable "$svc" >/dev/null 2>&1
-  sudo systemctl stop "$svc" >/dev/null 2>&1
-done
-
 # ------------------------------------------------------------------------------------------------
 # Clean up
 # ------------------------------------------------------------------------------------------------
 rm -rf ~/tmp
-rm ~/.motd_shown ~/.sudo_as_admin_successful ~/.zshrc
-rm -- "$0" # remove this script
+rm -f ~/.motd_shown ~/.sudo_as_admin_successful ~/.zshrc
 
 # end of script
 echo
 echo -e "\tUbuntu setup complete."
+
+rm -- "$0" # remove this script
+

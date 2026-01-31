@@ -4,9 +4,7 @@
 $WINGET_PACKAGES_TO_UNINSTALL = @(
     "Microsoft.WindowsTerminal",
     "Notepad++.Notepad++",
-    "Microsoft.VisualStudioCode",
-    "Anysphere.Cursor",
-    "JetBrains.IntelliJIDEA.Ultimate"
+    "Microsoft.VisualStudioCode"
 )
 
 function Test-RunningAsAdministrator {
@@ -147,35 +145,29 @@ function Uninstall-WingetPackage {
     )
 
     try {
-        $output = winget list --id $PackageName --exact 2>$null
-        if ($LASTEXITCODE -eq 0 -and $output) {
-            winget uninstall --id $PackageName --silent --force --accept-source-agreements *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Winget uninstall failed for $PackageName (exit code $LASTEXITCODE)"
-            } else {
-                Write-Host " - Uninstalled: $PackageName" -ForegroundColor White
-            }
+        $process = Start-Process winget `
+            -ArgumentList @(
+                "uninstall",
+                "--id", $PackageName,
+                "--exact",
+                "--force",
+                "--silent",
+                "--disable-interactivity",
+                "--accept-source-agreements",
+                "--source", "winget"
+            ) `
+            -NoNewWindow `
+            -Wait `
+            -PassThru
+
+        if ($process.ExitCode -eq 0) {
+            Write-Host " - Uninstalled (or not present): $PackageName" -ForegroundColor White
+        } else {
+            throw "Winget uninstall failed (exit code $($process.ExitCode))"
         }
-    } catch {
-        throw "Uninstall-WingetPackage failed for '$PackageName': $($_.Exception.Message)"
     }
-}
-
-function Uninstall-Chocolatey {
-    try {
-        $chocoPath = "$env:ProgramData\chocolatey"
-        if (Test-Path $chocoPath) {
-            Remove-Item -Path $chocoPath -Recurse -Force -ErrorAction Stop
-            Write-Host " - Chocolatey directory removed" -ForegroundColor White
-        }
-
-        $envPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Machine)
-        if ($envPath -like "*chocolatey*") {
-            $newPath = ($envPath -split ";" | Where-Object { $_ -notmatch "chocolatey" }) -join ";"
-            [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Machine)
-        }
-    } catch {
-        throw "Uninstall-Chocolatey failed: $($_.Exception.Message)"
+    catch {
+        throw "Uninstall-WingetPackage failed for '$PackageName': $($_.Exception.Message)"
     }
 }
 
@@ -244,7 +236,6 @@ try {
         Uninstall-WingetPackage $pkg
     }
 
-    Uninstall-Chocolatey
     Remove-WSLDistro
     Disable-WSLFeatures
     Remove-WSLConfig

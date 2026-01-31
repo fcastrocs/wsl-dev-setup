@@ -21,15 +21,10 @@ $WINGET_PACKAGES = @(
     "Microsoft.WindowsTerminal",
     "Notepad++.Notepad++",
     "Microsoft.VisualStudioCode"
-    #"Anysphere.Cursor",
-    #"JetBrains.IntelliJIDEA.Ultimate"
 )
 
 # Custom Scripts
 $CUSTOM_SCRIPTS = @(
-    "awslogin",
-    "awslogin-eks",
-    "awslogin-ecr",
     "gim"
 )
 
@@ -131,37 +126,6 @@ function Test-RunningAsAdministrator {
     }
 }
 
-function Install-ChocoPackage {
-    param (
-        [Parameter(Mandatory)]
-        [string]$PackageName
-    )
-
-    Write-Host "`n - Installing package: $PackageName..."
-
-    # Only check locally installed packages
-    $isInstalled = choco list | Select-String -Pattern "^$PackageName\s" -Quiet
-
-    try {
-        if ($isInstalled) {
-            choco upgrade $PackageName -y *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "`tUpgrade failed for package '$PackageName'"
-            }
-            Write-Host "`tPackage '$PackageName' upgraded." -ForegroundColor DarkGray
-        }
-        else {
-            choco install $PackageName -y *> $null
-            if ($LASTEXITCODE -ne 0) {
-                throw "`tInstall failed for package '$PackageName'"
-            }
-        }
-    }
-    catch {
-        throw "Install-ChocoPackage failed: $($_.Exception.Message)"
-    }
-}
-
 function Get-WingetPath {
     $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
     if (Test-Path $wingetPath) {
@@ -253,7 +217,7 @@ function Enable-WSLFeatures {
     }
 
     if ($restartRequired) {
-        throw "Restart required to complete WSL setup."
+        throw "Restart required to complete WSL setup. Run script again after restart."
     }
 }
 
@@ -439,36 +403,6 @@ function Invoke-WSLSetupScript {
     }
 }
 
-function Install-Chocolatey {
-    Write-Host "`n - Installing Chocolatey..."
-
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        # Update Chocolatey if already installed
-        Install-ChocoPackage -PackageName "chocolatey"
-        return
-    }
-
-    try {
-        Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction Stop
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-
-        $chocoScript = "$env:TEMP\install-choco.ps1"
-        Invoke-WebRequest -Uri "https://community.chocolatey.org/install.ps1" -OutFile $chocoScript -UseBasicParsing -ErrorAction Stop
-
-        $powerShellExe = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
-        $output = & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $chocoScript 2>&1
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Chocolatey install script failed (exit code $LASTEXITCODE): $output"
-        }
-
-        Remove-Item $chocoScript -Force -ErrorAction SilentlyContinue
-    }
-    catch {
-        throw "Install-Chocolatey failed: $($_.Exception.Message)"
-    }
-}
-
 function Install-NerdFontFiraCode {
     Write-Host "`n - Installing Nerd Font Fira Code"
 
@@ -594,7 +528,6 @@ function Open-AppsForFirstTime {
 
     $apps = @(
         @{ name = "VS Code"; exe = "code"; process = "Code" },
-        @{ name = "Cursor IDE"; exe = "cursor"; process = "Cursor" },
         @{ name = "Notepad++"; exe = "notepad++.exe"; process = "notepad++" },
         @{ name = "Windows Terminal"; exe = "wt.exe"; process = "WindowsTerminal" }
     )
@@ -662,7 +595,6 @@ function Set-FiraCodeFontInEditors {
 
     $editors = @{
         "VS Code"    = "$env:APPDATA\Code\User\settings.json"
-        "Cursor IDE" = "$env:APPDATA\Cursor\User\settings.json"
     }
 
     foreach ($name in $editors.Keys) {
@@ -866,12 +798,70 @@ function Send-CustomScripts {
     }
 }
 
+function New-SetupRestorePoint {
+    # 1. Generate timestamp
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmm"
+    $restorePointName = "WSL-Setup-$timestamp"
+    
+    # Registry path for the 24-hour limit setting
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore"
+    $regName = "SystemRestorePointCreationFrequency"
+    $limitDisabled = $false
+
+    Write-Host "`n - Preparing Windows System Restore Point..."
+
+    try {
+        # 2. Ensure System Restore is actually enabled on C:
+        $rstr = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
+        if ($null -eq $rstr) {
+             Write-Host "`tEnabling System Restore on drive C:..." -ForegroundColor DarkGray
+             Enable-ComputerRestore -Drive $env:SystemDrive -ErrorAction SilentlyContinue
+        }
+
+        # 3. BYPASS THE 24-HOUR LIMIT
+        # We set the frequency limit to 0 so we can create a point even if one was made 5 minutes ago.
+        if (Test-Path $regPath) {
+            # Save original value if it exists
+            $originalValue = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+            
+            # Set to 0 to disable the limit
+            Set-ItemProperty -Path $regPath -Name $regName -Value 0 -Type DWord -Force
+            $limitDisabled = $true
+        }
+
+        # 4. Create the Restore Point
+        # Note: We do not delete old "WSL-Setup" points because Windows does not support 
+        # selective deletion by name (only 'All' or 'None'). 
+        # Bypassing the limit ensures this command succeeds regardless.
+        Checkpoint-Computer -Description $restorePointName -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+
+        Write-Host "`tSuccess: '$restorePointName' created." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "`tWARNING: Could not create restore point." -ForegroundColor Yellow
+        Write-Host "`tError: $($_.Exception.Message)" -ForegroundColor DarkGray
+    }
+    finally {
+        # 5. CLEANUP: Restore the registry limit to default (safety)
+        if ($limitDisabled) {
+            if ($originalValue -and $originalValue.PSObject.Properties[$regName]) {
+                Set-ItemProperty -Path $regPath -Name $regName -Value $originalValue.$regName -Force
+            } else {
+                # If it didn't exist before (default), remove our override
+                Remove-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 Write-Host "`n========================================================" -ForegroundColor DarkYellow
 Write-Host "         WSL Full Developer Setup Starting" -ForegroundColor DarkYellow
 Write-Host "========================================================" -ForegroundColor DarkYellow
 
 try {
     Test-RunningAsAdministrator
+
+    New-SetupRestorePoint
 
     # Install and setup WSL
     Enable-WSLFeatures
