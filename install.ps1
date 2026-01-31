@@ -21,8 +21,8 @@ $WINGET_PACKAGES = @(
     "Microsoft.WindowsTerminal",
     "Notepad++.Notepad++",
     "Microsoft.VisualStudioCode",
-    "Anysphere.Cursor",
-    "JetBrains.IntelliJIDEA.Ultimate"
+    #"Anysphere.Cursor",
+    #"JetBrains.IntelliJIDEA.Ultimate"
 )
 
 # Custom Scripts
