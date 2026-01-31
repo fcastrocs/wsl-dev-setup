@@ -12,8 +12,6 @@ irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/install.ps1 |
 ## 🖥️ Windows Installation
 - Windows Terminal
 - Visual Studio Code
-- Cursor IDE
-- IntelliJ IDEA Ultimate
 - Notepad++
 - FiraCode Nerd Font
 - WSL2 + Ubuntu (latest LTS)
