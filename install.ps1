@@ -20,7 +20,7 @@ $TERMINAL_COLOR_SCHEME = "One Half Dark"
 $WINGET_PACKAGES = @(
     "Microsoft.WindowsTerminal",
     "Notepad++.Notepad++",
-    "Microsoft.VisualStudioCode",
+    "Microsoft.VisualStudioCode"
     #"Anysphere.Cursor",
     #"JetBrains.IntelliJIDEA.Ultimate"
 )
