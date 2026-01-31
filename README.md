@@ -9,34 +9,30 @@
 irm https://raw.githubusercontent.com/fcastrocs/wsl-dev-setup/main/install.ps1 | iex
 ```
 
-## 🖥️ Windows Installation
+## ✨ What It Does
+
+- **WSL2 Setup**: Enables WSL, installs Ubuntu with an optimized `.wslconfig` config
+- **User Configuration**: Creates a user with passwordless sudo in Ubuntu
+- **Windows Terminal Setup**: Configured with Ubuntu as the default profile, FiraCode font, and One Half Dark theme
+- **Editor Setup**: Applies FiraCode font to VS Code, and Notepad++
+- **Shell Environment**: Zsh setup with auto-suggestions, syntax highlighting, and smart completions
+
+## 🖥️ Access Your Environment
+
+After installation, simply open **Windows Terminal**
+
+## 🖥️ Windows Setup
 - Windows Terminal
 - Visual Studio Code
 - Notepad++
 - FiraCode Nerd Font
 - WSL2 + Ubuntu (latest LTS)
 
-## 🐧 Ubuntu Installation
+## 🐧 WSL Ubuntu Setup
 - Zsh + Oh My Zsh + Starship prompt
-- Git + GitHub CLI
+- Git
 - Docker + Docker Compose
 - Node.js (via NVM)
-- AWS CLI v2
-- kubectl + k9s
-- Telepresence
-- kubetail
-
-## ✨ What It Does
-
-- **WSL2 Setup**: Enables WSL, installs Ubuntu, creates optimized `.wslconfig`
-- **User Configuration**: Creates non-root user with passwordless sudo
-- **Terminal Setup**: Configures Windows Terminal with Ubuntu as default, FiraCode font, One Half Dark theme
-- **Editor Setup**: Applies FiraCode font to VS Code, Cursor, and Notepad++
-- **Shell Environment**: Beautiful Zsh setup with auto-suggestions, syntax highlighting, and smart completions
-
-## 🖥️ Access Your Environment
-
-After installation, simply open **Windows Terminal** - it will automatically launch Ubuntu with your configured Zsh shell and development tools ready to use.
 
 ## 🗑️ Uninstall
 
