@@ -29,7 +29,7 @@ $WINGET_PACKAGES = @(
 $CUSTOM_SCRIPTS = @(
     "awslogin",
     "awslogin-eks",
-    "awslogin-ecr"
+    "awslogin-ecr",
     "gim"
 )
 
