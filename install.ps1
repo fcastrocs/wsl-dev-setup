@@ -249,8 +249,8 @@ function Install-UbuntuWslInstance {
     $downloadDir    = "$env:TEMP\UbuntuWSL"
     $installBaseDir = "C:\WSL"
     $installDir     = Join-Path $installBaseDir $DISTRO_NAME
-    $tarballName    = "ubuntu-noble-wsl-amd64-24.04lts.rootfs.tar.gz"
-    $downloadUrl    = "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/$tarballName"
+    $tarballName    = "ubuntu-jammy-wsl-amd64-wsl.rootfs.tar.gz"
+    $downloadUrl    = "https://cloud-images.ubuntu.com/wsl/releases/22.04/current/$tarballName"
     $tarballPath    = Join-Path $downloadDir $tarballName
 
     try {
