@@ -31,7 +31,7 @@ $CUSTOM_SCRIPTS = @(
 $DISTRO_NAME = if ($distroName) {
     $distroName
 } elseif ($newInstance) {
-    "Ubuntu-24-04-$(Get-Date -Format 'MMddyyyy-HHmm')"
+    "Ubuntu-22-04-$(Get-Date -Format 'MMddyyyy-HHmm')"
 } else {
     "Ubuntu"
 }
